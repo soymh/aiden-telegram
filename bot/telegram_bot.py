@@ -1450,52 +1450,74 @@ class ChatGPTTelegramBot:
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
 
-    async def set_config_command(self , update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+    async def config_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Handle configuration commands for both setting and getting values.
+        Command formats:
+        - Set: /setconfig set <openai|telegram> <config_key> <new_value>
+        - Get: /setconfig get <openai|telegram> <config_key>
+        """
         user = update.effective_user
         admin_check = is_admin(self.config, user.id)
 
-        # Expecting: /setconfig <openai|telegram> <config_key> <new_value>
-        if len(context.args) != 3:
+        # Ensure at least one argument is provided.
+        if not context.args or len(context.args) < 3:
             await update.message.reply_text(
-                "Usage: /setconfig <openai|telegram> <config_key> <new_value>"
+                "Usage:\n"
+                "  To get: /setconfig get <openai|telegram> <config_key>\n"
+                "  To set: /setconfig set <openai|telegram> <config_key> <new_value>"
             )
             return
 
-        config_type = context.args[0].lower()
-        key = context.args[1]
-        new_val_str = " ".join(context.args[2:])
+        # First argument is the action: set or get.
+        action = context.args[0].lower()
+        config_type = context.args[1].lower()
+        key = context.args[2]
 
-
-        if not usage_tracker:
-            await update.message.reply_text("Configuration manager not found.")
+        # Assume that the usage_tracker is stored as a dictionary with user ids as keys.
+        if user.id not in self.usage:
+            await update.message.reply_text("Configuration manager for your user was not found.")
             return
 
-        if config_type == "openai":
-            success = self.usage[user.id].update_openai_config(admin_check, key, new_val_str)
-            if success:
-                await update.message.reply_text(
-                    f"Updated OpenAI config: {key} -> {new_val_str}"
-                )
+        # Branch based on the action.
+        if action == "set":
+            if len(context.args) < 4:
+                await update.message.reply_text("Usage: /setconfig set <openai|telegram> <config_key> <new_value>")
+                return
+            new_val_str = " ".join(context.args[3:])
+            if config_type == "openai":
+                success = self.usage[user.id].update_openai_config(admin_check, key, new_val_str)
+                if success:
+                    await update.message.reply_text(f"Updated OpenAI config: {key} -> {new_val_str}")
+                else:
+                    await update.message.reply_text("Failed to update OpenAI config. Check the key name and value format.")
+            elif config_type == "telegram":
+                success = self.usage[user.id].update_telegram_config(admin_check, key, new_val_str)
+                if success:
+                    await update.message.reply_text(f"Updated Telegram config: {key} -> {new_val_str}")
+                else:
+                    await update.message.reply_text("Failed to update Telegram config. Check the key name and value format.")
             else:
-                await update.message.reply_text(
-                    "Failed to update OpenAI config. Check the key name and value format."
-                )
-        elif config_type == "telegram":
-            success = self.usage[user.id].update_telegram_config(admin_check, key, new_val_str)
-            if success:
-                await update.message.reply_text(
-                    f"Updated Telegram config: {key} -> {new_val_str}"
-                )
+                await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
+        elif action == "get":
+            if config_type == "openai":
+                current_value = self.usage[user.id].openai_config.get(key, None)
+                if current_value is not None:
+                    await update.message.reply_text(f"Current OpenAI config: {key} = {current_value}")
+                else:
+                    await update.message.reply_text("Key not found in OpenAI config.")
+            elif config_type == "telegram":
+                current_value = self.usage[user.id].telegram_config.get(key, None)
+                if current_value is not None:
+                    await update.message.reply_text(f"Current Telegram config: {key} = {current_value}")
+                else:
+                    await update.message.reply_text("Key not found in Telegram config.")
             else:
-                await update.message.reply_text(
-                    "Failed to update Telegram config. Check the key name and value format."
-                )
+                await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
         else:
-            await update.message.reply_text(
-                "Invalid config type. Use either 'openai' or 'telegram'."
-            )
+            await update.message.reply_text("Invalid action. Use either 'set' or 'get'.")
 
+            
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
@@ -1521,7 +1543,7 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler(
             'moderate', self.moderate, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP)
         )
-        application.add_handler(CommandHandler('setconfig', self.set_config_command, filters=filters.ChatType.PRIVATE))
+        application.add_handler(CommandHandler('setconfig', self.config_commands, filters=filters.ChatType.PRIVATE))
         application.add_handler(MessageHandler(
             filters.PHOTO | filters.Document.IMAGE,
             self.vision))
