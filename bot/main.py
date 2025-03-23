@@ -23,9 +23,13 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO
-    )
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    handlers=[
+        logging.FileHandler("logs.log", mode="a"),  # Append to the file
+        logging.StreamHandler()  # Optional: log to console as well
+            ])
+
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     # Check if the required environment variables are set
