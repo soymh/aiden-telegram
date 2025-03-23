@@ -1,7 +1,11 @@
 import os.path
 import pathlib
 import json
+import os
 from datetime import date
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def year_month(date_str):
     # extract string of year-month from date, eg: '2023-03'
@@ -13,32 +17,8 @@ model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini-2024-07-18')
 class UsageTracker:
     """
     UsageTracker class
-    Enables tracking of daily/monthly usage per user.
+    Enables tracking of daily/monthly usage and configs per user.
     User files are stored as JSON in /usage_logs directory.
-    JSON example:
-    {
-        "user_name": "@user_name",
-        "current_cost": {
-            "day": 0.45,
-            "month": 3.23,
-            "all_time": 3.23,
-            "last_update": "2023-03-14"},
-        "usage_history": {
-            "chat_tokens": {
-                "2023-03-13": 520,
-                "2023-03-14": 1532
-            },
-            "transcription_seconds": {
-                "2023-03-13": 125,
-                "2023-03-14": 64
-            },
-            "number_images": {
-                "2023-03-12": [0, 2, 3],
-                "2023-03-13": [1, 2, 3],
-                "2023-03-14": [0, 1, 2]
-            }
-        }
-    }
     """
 
     def __init__(self, user_id, user_name, default_max_tokens=None, are_functions_available=None, logs_dir="user_logs"):
@@ -115,7 +95,7 @@ class UsageTracker:
             # User Access Control
             'admin_user_id': os.environ.get('ADMIN_USER_IDS', '-'),
             # 'allowed_user_ids': ','.join(allowed_user_ids_list) if allowed_user_ids_list != [] else os.environ.get('ADMIN_USER_IDS', '-'),
-            'is_admin': False,
+            'is_admin': self.user_id == os.environ.get('ADMIN_USER_IDS', '-'),
             'is_allowed': False,
 
 

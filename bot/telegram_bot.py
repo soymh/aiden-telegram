@@ -5,8 +5,7 @@ import logging
 import os
 import io
 from io import BytesIO
-
-#for TogetherAI
+import json
 import base64
 
 from uuid import uuid4
@@ -32,6 +31,7 @@ from usage_tracker import UsageTracker
 
 #Load the .env file
 from dotenv import load_dotenv
+
 load_dotenv()
 
 class ChatGPTTelegramBot:
@@ -57,10 +57,12 @@ class ChatGPTTelegramBot:
         self.usage[self.user_id] = UsageTracker(self.user_id , self.username)
         self.usage[self.user_id].add_new_user()
 
+        self.logs_dir = "user_logs"
+
         self.config = {
         'token': os.environ['TELEGRAM_BOT_TOKEN'],
         'admin_user_id': os.environ.get('ADMIN_USER_IDS', '-'),
-        'allowed_user_ids': ','.join(allowed_user_ids_list) if allowed_user_ids_list!=[] else os.environ.get('ADMIN_USER_IDS', '-'),
+        'is_admin': self.user_id == os.environ.get('ADMIN_USER_IDS', '-'),
         'allow_group_users':self.usage[self.user_id].retrieve_config_value('telegram_config','allow_group_users'),
         'enable_quoting': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_quoting'),
         'enable_image_generation': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_image_generation'),
@@ -1085,12 +1087,13 @@ class ChatGPTTelegramBot:
         """
         React to incoming messages and respond accordingly.
         """
+        user = update.effective_user
         await self.user_update(update,context)
         if update.edited_message or not update.message or update.message.via_bot:
             return
 
         # If the user is awaiting channel ID input, do nothing here.
-        if update.message.from_user.id in self.awaiting_users or update.message.from_user.id not in self.usage:
+        if update.message.from_user.id in self.awaiting_users or not is_allowed(self.config, update, context) :
             return
 
         if not await self.check_allowed_and_within_budget(update, context):
@@ -1452,16 +1455,96 @@ class ChatGPTTelegramBot:
 
     async def config_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
-        Handle configuration commands for both setting and getting values.
-        Command formats:
-        - Set: /setconfig set <openai|telegram> <config_key> <new_value>
-        - Get: /setconfig get <openai|telegram> <config_key>
+        Handle configuration commands for:
+        - get: /setconfig get <openai|telegram> <config_key>
+        - set: /setconfig set <openai|telegram> <config_key> <new_value>
+        - list: /setconfig list
+        - permit: /setconfig permit <user_id> <true|false>
         """
+        await self.user_update(update,context)
+
         user = update.effective_user
         admin_check = is_admin(self.config, user.id)
 
-        # Ensure at least one argument is provided.
-        if not context.args or len(context.args) < 3:
+        if not is_admin(self.config,user.id):
+            await self.send_disallowed_message(update,context)
+            return
+        
+        # Check for list and permit actions separately.
+        if not context.args:
+            await update.message.reply_text(
+                "Usage:\n"
+                "  To get: /setconfig get <openai|telegram> <config_key>\n"
+                "  To set: /setconfig set <openai|telegram> <config_key> <new_value>\n"
+                "  To list allowed users: /setconfig list\n"
+                "  To permit/disallow a user: /setconfig permit <user_id> <true|false>"
+            )
+            return
+
+        action = context.args[0].lower()
+
+        # --- List allowed users ---
+        if action == "list":
+            allowed_users = []
+            # Assume self.logs_dir holds the path to user JSON files.
+            for file_name in os.listdir(self.logs_dir):
+                if file_name.endswith(".json"):
+                    file_path = os.path.join(self.logs_dir, file_name)
+                    try:
+                        with open(file_path, "r") as f:
+                            data = json.load(f)
+                        # Check if telegram_config and the "is_allowed" flag exist and are True
+                        if data.get("telegram_config", {}).get("is_allowed", False):
+                            allowed_users.append(f"{file_name[:-5]}: {data.get('user_name', 'N/A')}")
+                    except Exception as e:
+                        # Log or skip any files that can't be read
+                        logging.info(f"error while getting allowed users list: {e}")
+                        continue
+            if allowed_users:
+                msg = "Allowed users:\n" + "\n".join(allowed_users)
+            else:
+                msg = "No allowed users found."
+            await update.message.reply_text(msg)
+            return
+
+        # --- Permit/disallow a user ---
+        if action == "permit":
+            # Expected: /setconfig permit <user_id> <true|false>
+            if len(context.args) != 3:
+                await update.message.reply_text("Usage: /setconfig permit <user_id> <true|false>")
+                return
+            target_user_id = context.args[1]
+            new_status_str = context.args[2].lower()
+            if new_status_str not in ("true", "false"):
+                await update.message.reply_text("The allowed status must be 'true' or 'false'.")
+                return
+            new_status = new_status_str == "true"
+            file_path = os.path.join(self.logs_dir, f"{target_user_id}.json")
+            if not os.path.isfile(file_path):
+                await update.message.reply_text("User file not found.")
+                return
+            try:
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+                # Update allowed status in telegram_config
+                if "telegram_config" in data:
+                    data["telegram_config"]["is_allowed"] = new_status
+                else:
+                    data["telegram_config"] = {"is_allowed": new_status}
+                with open(file_path, "w") as f:
+                    json.dump(data, f, indent=4)
+                await update.message.reply_text(f"User {target_user_id} allowed status updated to {new_status}.")
+            except Exception as e:
+                await update.message.reply_text("Failed to update user file.")
+            return
+
+        # --- For get and set actions ---
+        # Ensure at least 3 arguments are provided for get, and 4 for set.
+        if action not in ("get", "set"):
+            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', or 'permit'.")
+            return
+
+        if len(context.args) < 3:
             await update.message.reply_text(
                 "Usage:\n"
                 "  To get: /setconfig get <openai|telegram> <config_key>\n"
@@ -1469,17 +1552,14 @@ class ChatGPTTelegramBot:
             )
             return
 
-        # First argument is the action: set or get.
-        action = context.args[0].lower()
         config_type = context.args[1].lower()
         key = context.args[2]
 
-        # Assume that the usage_tracker is stored as a dictionary with user ids as keys.
+        # Assume self.usage is a dict keyed by user id.
         if user.id not in self.usage:
             await update.message.reply_text("Configuration manager for your user was not found.")
             return
 
-        # Branch based on the action.
         if action == "set":
             if len(context.args) < 4:
                 await update.message.reply_text("Usage: /setconfig set <openai|telegram> <config_key> <new_value>")
@@ -1513,11 +1593,7 @@ class ChatGPTTelegramBot:
                 else:
                     await update.message.reply_text("Key not found in Telegram config.")
             else:
-                await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
-        else:
-            await update.message.reply_text("Invalid action. Use either 'set' or 'get'.")
-
-            
+                await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")            
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C

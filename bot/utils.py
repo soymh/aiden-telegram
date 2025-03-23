@@ -197,7 +197,7 @@ async def is_allowed(config, update: Update, context: CallbackContext, is_inline
     return False
 
 
-def is_admin(config, user_id: int, log_no_admin=False) -> bool:
+def is_admin(config, user_id: int) -> bool:
     """
     Checks if the user is the admin of the bot.
     The first user in the user list is the admin.
