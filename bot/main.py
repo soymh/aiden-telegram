@@ -14,7 +14,7 @@ def main():
     # Read .env file
     load_dotenv()
     first_admin = os.environ.get('ADMIN_USER_IDS','0').split(',')[0]
-    admin_tracker = UsageTracker(user_id=first_admin, user_name='admin',default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
+    admin_tracker = UsageTracker(user_id=first_admin, username='admin',chat_id=first_admin ,default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
     users_directory = admin_tracker.logs_dir
     allowed_user_ids_list = [
         filename[:-5] for filename in os.listdir(users_directory)
@@ -43,41 +43,43 @@ def main():
     model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini-2024-07-18')
     functions_available = are_functions_available(model=model)
     max_tokens_default = default_max_tokens(model=model)
-    openai_config = {
-        'api_key': os.environ['OPENAI_API_KEY'],
-        'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
-        'stream': os.environ.get('STREAM', 'true').lower() == 'true',
-        'proxy': os.environ.get('PROXY', None) or os.environ.get('OPENAI_PROXY', None),
-        'max_history_size': int(os.environ.get('MAX_HISTORY_SIZE', 15)),
-        'max_conversation_age_minutes': int(os.environ.get('MAX_CONVERSATION_AGE_MINUTES', 180)),
-        'assistant_prompt': os.environ.get('ASSISTANT_PROMPT', 'You are a helpful assistant.'),
-        'max_tokens': int(os.environ.get('MAX_TOKENS', max_tokens_default)),
-        'n_choices': int(os.environ.get('N_CHOICES', 1)),
-        'temperature': float(os.environ.get('TEMPERATURE', 1.0)),
-        'image_model': os.environ.get('IMAGE_MODEL', 'dall-e-3'),
-        'image_quality': os.environ.get('IMAGE_QUALITY', 'standard'),
-        'image_style': os.environ.get('IMAGE_STYLE', 'vivid'),
-        'image_size': os.environ.get('IMAGE_SIZE', '1024x1024'),
-        'model': model,
-        'enable_functions': os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true',
-        'functions_max_consecutive_calls': int(os.environ.get('FUNCTIONS_MAX_CONSECUTIVE_CALLS', 10)),
-        'presence_penalty': float(os.environ.get('PRESENCE_PENALTY', 0.0)),
-        'frequency_penalty': float(os.environ.get('FREQUENCY_PENALTY', 0.0)),
-        'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
-        'show_plugins_used': os.environ.get('SHOW_PLUGINS_USED', 'false').lower() == 'true',
-        'whisper_prompt': os.environ.get('WHISPER_PROMPT', ''),
-        'vision_model': os.environ.get('VISION_MODEL', 'gpt-4o'),
-        'enable_vision_follow_up_questions': os.environ.get('ENABLE_VISION_FOLLOW_UP_QUESTIONS', 'true').lower() == 'true',
-        'vision_prompt': os.environ.get('VISION_PROMPT', 'What is in this image'),
-        'vision_detail': os.environ.get('VISION_DETAIL', 'auto'),
-        'vision_max_tokens': int(os.environ.get('VISION_MAX_TOKENS', '300')),
-        'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
-        'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
-        'flux_base_url': os.environ.get('FLUX_BASE_URL','https://api.together.xyz/v1'),
 
-    }
+    enable_functions = os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true'
+    # openai_config = {
+    #     'api_key': os.environ['OPENAI_API_KEY'],
+    #     'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
+    #     'stream': os.environ.get('STREAM', 'true').lower() == 'true',
+    #     'proxy': os.environ.get('PROXY', None) or os.environ.get('OPENAI_PROXY', None),
+    #     'max_history_size': int(os.environ.get('MAX_HISTORY_SIZE', 15)),
+    #     'max_conversation_age_minutes': int(os.environ.get('MAX_CONVERSATION_AGE_MINUTES', 180)),
+    #     'assistant_prompt': os.environ.get('ASSISTANT_PROMPT', 'You are a helpful assistant.'),
+    #     'max_tokens': int(os.environ.get('MAX_TOKENS', max_tokens_default)),
+    #     'n_choices': int(os.environ.get('N_CHOICES', 1)),
+    #     'temperature': float(os.environ.get('TEMPERATURE', 1.0)),
+    #     'image_model': os.environ.get('IMAGE_MODEL', 'dall-e-3'),
+    #     'image_quality': os.environ.get('IMAGE_QUALITY', 'standard'),
+    #     'image_style': os.environ.get('IMAGE_STYLE', 'vivid'),
+    #     'image_size': os.environ.get('IMAGE_SIZE', '1024x1024'),
+    #     'model': model,
+    #     'enable_functions': os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true',
+    #     'functions_max_consecutive_calls': int(os.environ.get('FUNCTIONS_MAX_CONSECUTIVE_CALLS', 10)),
+    #     'presence_penalty': float(os.environ.get('PRESENCE_PENALTY', 0.0)),
+    #     'frequency_penalty': float(os.environ.get('FREQUENCY_PENALTY', 0.0)),
+    #     'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
+    #     'show_plugins_used': os.environ.get('SHOW_PLUGINS_USED', 'false').lower() == 'true',
+    #     'whisper_prompt': os.environ.get('WHISPER_PROMPT', ''),
+    #     'vision_model': os.environ.get('VISION_MODEL', 'gpt-4o'),
+    #     'enable_vision_follow_up_questions': os.environ.get('ENABLE_VISION_FOLLOW_UP_QUESTIONS', 'true').lower() == 'true',
+    #     'vision_prompt': os.environ.get('VISION_PROMPT', 'What is in this image'),
+    #     'vision_detail': os.environ.get('VISION_DETAIL', 'auto'),
+    #     'vision_max_tokens': int(os.environ.get('VISION_MAX_TOKENS', '300')),
+    #     'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
+    #     'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
+    #     'flux_base_url': os.environ.get('FLUX_BASE_URL','https://api.together.xyz/v1'),
 
-    if openai_config['enable_functions'] and not functions_available:
+    # }
+
+    if enable_functions and not functions_available:
         logging.error(f'ENABLE_FUNCTIONS is set to true, but the model {model} does not support it. '
                         'Please set ENABLE_FUNCTIONS to false or use a model that supports it.')
         exit(1)
@@ -125,7 +127,7 @@ def main():
 
     # Setup and run ChatGPT and Telegram bot
     plugin_manager = PluginManager(config=plugin_config)
-    openai_helper = OpenAIHelper(config=openai_config, plugin_manager=plugin_manager)
+    openai_helper = OpenAIHelper( plugin_manager=plugin_manager)
     telegram_bot = ChatGPTTelegramBot(openai=openai_helper)
     telegram_bot.run()
 

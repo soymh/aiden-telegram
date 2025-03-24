@@ -21,12 +21,12 @@ class UsageTracker:
     User files are stored as JSON in /usage_logs directory.
     """
 
-    def __init__(self, user_id, user_name, default_max_tokens=None, are_functions_available=None, logs_dir="user_logs"):
+    def __init__(self, user_id, username, chat_id, default_max_tokens=None, are_functions_available=None, logs_dir="user_logs"):
         """
         Initializes UsageTracker for a user with current date.
         Loads usage data from usage log file.
         :param user_id: Telegram ID of the user
-        :param user_name: Telegram user name
+        :param username: Telegram user name
         :param logs_dir: path to directory of usage logs, defaults to "usage_logs"
         """
         self.are_functions_available = are_functions_available
@@ -34,10 +34,14 @@ class UsageTracker:
         self.functions_available = self.are_functions_available(model=model) if self.are_functions_available else True
         self.max_tokens_default = self.default_max_tokens(model=model) if self.default_max_tokens else 1200
         self.user_id = user_id
+        self.chat_id = chat_id
         self.logs_dir = logs_dir
         # path to usage file of given user
         self.user_file = f"{logs_dir}/{user_id}.json"
-
+        allowed_user_ids_list = [
+            filename[:-5] for filename in os.listdir(logs_dir)
+            if os.path.isfile(os.path.join(logs_dir, filename)) and filename.lower().endswith('.json')
+        ]
         self.openai_config = {
             # API Configuration
             'api_key': os.environ['OPENAI_API_KEY'],
@@ -87,16 +91,17 @@ class UsageTracker:
         # Telegram configuration re-ordered by sections
         self.telegram_config = {
             # Telegram Bot Configuration
-            # 'token': os.environ['TELEGRAM_BOT_TOKEN'],
+            'token': os.environ['TELEGRAM_BOT_TOKEN'],
             'mod_bot_token': os.environ.get("MODRATOR_TOKEN", ""),  # maps to BOT_TOKEN_MODERATOR
             'channel_id': os.environ.get('CHANNEL_ID', ""),
             'group_id': os.environ.get('GROUP_ID', ""),
             
             # User Access Control
             'admin_user_id': os.environ.get('ADMIN_USER_IDS', '-'),
-            # 'allowed_user_ids': ','.join(allowed_user_ids_list) if allowed_user_ids_list != [] else os.environ.get('ADMIN_USER_IDS', '-'),
-            'is_admin': self.user_id == os.environ.get('ADMIN_USER_IDS', '-'),
+            'allowed_user_ids': ','.join(allowed_user_ids_list) if allowed_user_ids_list != [] else os.environ.get('ADMIN_USER_IDS', '-'),
+            'is_admin': self.user_id in os.environ.get('ADMIN_USER_IDS', '-').split(','),
             'is_allowed': False,
+            'is_forbidden': False,
 
 
             # Message Keywords and Triggers
@@ -136,6 +141,9 @@ class UsageTracker:
             'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
         }
 
+        self.conversations: dict[int: list] = {self.chat_id:[]}  # {chat_id: history}  
+        self.conversations_vision: dict[str: bool] = {self.chat_id:bool()}  # {chat_id: is_vision}
+        self.last_updated: dict[int: str] = {self.chat_id:str()}  # {chat_id: last_update_timestamp}
 
 
         if os.path.isfile(self.user_file):
@@ -150,20 +158,64 @@ class UsageTracker:
             pathlib.Path(logs_dir).mkdir(exist_ok=True)
             # create new dictionary for this user
             self.usage = {
-                "user_name": user_name,
+                "username": username,
                 "current_cost": {"day": 0.0, "month": 0.0, "all_time": 0.0, "last_update": str(date.today())},
                 "usage_history": {"chat_tokens": {}, "transcription_seconds": {}, "number_images": {}, "tts_characters": {}, "vision_tokens":{}},
                 "openai_config": self.openai_config,
-                "telegram_config": self.telegram_config
+                "telegram_config": self.telegram_config,
+                "conversations": self.conversations,
+                "vision_conversations": self.conversations_vision,
+                "last_updated": self.last_updated,
             }
             
 
-    def add_new_user(self):
+    def save_state(self):
         """
         Write the new user json file.
         """
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
+
+
+    def do_conversations(self,update_value=None,chat_id=None,reset=False):
+        """
+        Update conversations dict in usage.
+        """
+        if update_value:
+            if not reset:
+                if str(chat_id) in self.usage['conversations'] :
+                    self.usage['conversations'][str(chat_id)].append(update_value)
+                else :
+                    self.usage['conversations'][str(chat_id)] = []
+                    self.usage['conversations'][str(chat_id)].append(update_value)
+            else:
+                self.usage['conversations'][str(chat_id)] = [update_value]
+            with open(self.user_file, "w") as outfile:
+                json.dump(self.usage, outfile, indent=4)
+            return
+        return self.usage['conversations']
+
+    def do_vision_conversations(self,update_value=None,chat_id=None):
+        """
+        Update vision conversations dict in usage.
+        """
+        if update_value:
+            self.usage['vision_conversations'][str(chat_id)].append(update_value)
+            with open(self.user_file, "w") as outfile:
+                json.dump(self.usage, outfile, indent=4)
+            return
+        return self.usage['vision_conversations']
+
+    def do_last_updated(self,update_value=None,chat_id=None):
+        """
+        Update last updated dict in usage.
+        """
+        if update_value:
+            self.usage['last_updated'][str(chat_id)].append(update_value)
+            with open(self.user_file, "w") as outfile:
+                json.dump(self.usage, outfile, indent=4)
+            return
+        return self.usage['last_updated']       
 
 
 
@@ -178,6 +230,8 @@ class UsageTracker:
                 return int(new_val_str)
             elif isinstance(current_val, float):
                 return float(new_val_str)
+            elif isinstance(current_val, str):
+                return str(new_val_str)
             elif isinstance(current_val, list):
                 # Assume comma-separated values
                 if current_val and isinstance(current_val[0], float):
@@ -220,20 +274,20 @@ class UsageTracker:
             'show_plugins_used'
         }
         if is_admin:
-            if key not in admin_allowed_keys:
+            if str(key) not in admin_allowed_keys:
                 return False
-            if key not in self.usage['openai_config']:
+            if str(key) not in self.usage['openai_config']:
                 return False
         else:
-            if key not in allowed_keys:
+            if str(key) not in allowed_keys:
                 return False
-            if key not in self.usage['openai_config']:
+            if str(key) not in self.usage['openai_config']:
                 return False
         current_val = self.usage['openai_config'][key]
         new_val = self.convert_value(new_val_str, current_val)
         self.usage['openai_config'][key] = new_val
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
     def update_telegram_config(self, is_admin:bool, key: str, new_val_str: str) -> bool:
         """
         Updates a Telegram configuration value if the key is allowed.
@@ -253,20 +307,20 @@ class UsageTracker:
             'allow_group_users', 'budget_period', 'user_budgets', 'bot_language' , 'is_allowed'
         }
         if is_admin:    
-            if key not in allowed_keys_admin:
+            if str(key) not in allowed_keys_admin:
                 return False
-            if key not in self.usage['telegram_config']:
+            if str(key) not in self.usage['telegram_config']:
                 return False
         else:
-            if key not in allowed_keys:
+            if str(key) not in allowed_keys:
                 return False
-            if key not in self.usage['telegram_config']:
+            if str(key) not in self.usage['telegram_config']:
                 return False
         current_val = self.usage['telegram_config'][key]
         new_val = self.convert_value(new_val_str, current_val)
         self.usage['telegram_config'][key] = new_val
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
 
     def retrieve_config_value(self, config_type: str, key: str):
         """
@@ -302,28 +356,44 @@ class UsageTracker:
             return None
 
 
-
-
     def add_chat_tokens(self, tokens, tokens_price=0.002):
-        """Adds used tokens from a request to a users usage history and updates current cost
-        :param tokens: total tokens used in last request
-        :param tokens_price: price per 1000 tokens, defaults to 0.002
+        """
+        Atomically updates the user's usage file by reading its current contents,
+        merging in the new token usage, and writing the result back.
+        This prevents overwriting previously stored data.
         """
         today = date.today()
         token_cost = round(float(tokens) * tokens_price / 1000, 6)
         self.add_current_costs(token_cost)
 
-        # update usage_history
-        if str(today) in self.usage["usage_history"]["chat_tokens"]:
-            # add token usage to existing date
-            self.usage["usage_history"]["chat_tokens"][str(today)] += tokens
-        else:
-            # create new entry for current date
-            self.usage["usage_history"]["chat_tokens"][str(today)] = tokens
+        # First, load current data from file.
+        current_usage = {}
+        if os.path.isfile(self.user_file):
+            try:
+                with open(self.user_file, "r") as infile:
+                    current_usage = json.load(infile)
+            except Exception as e:
+                logging.warning(f"Error reading usage file: {e}")
 
-        # write updated token usage to user file
-        with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+        # Make sure we have the expected structure.
+        if "usage_history" not in current_usage:
+            current_usage["usage_history"] = {}
+        if "chat_tokens" not in current_usage["usage_history"]:
+            current_usage["usage_history"]["chat_tokens"] = {}
+
+        # Update today's token count.
+        today_str = str(today)
+        if today_str in current_usage["usage_history"]["chat_tokens"]:
+            current_usage["usage_history"]["chat_tokens"][today_str] += tokens
+        else:
+            current_usage["usage_history"]["chat_tokens"][today_str] = tokens
+
+        # Write back the merged data to the file atomically.
+        try:
+            with open(self.user_file, "w") as outfile:
+                json.dump(current_usage, outfile, indent=4)
+        except Exception as e:
+            logging.warning(f"Failed to write tokens to usage file: {e}")
 
     def get_current_token_usage(self):
         """Get token amounts used for today and this month
@@ -368,7 +438,7 @@ class UsageTracker:
 
         # write updated image number to user file
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
 
     def get_current_image_count(self):
         """Get number of images requested for today and this month.
@@ -409,7 +479,7 @@ class UsageTracker:
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
 
     def get_current_vision_tokens(self):
         """Get vision tokens for today and this month.
@@ -453,7 +523,7 @@ class UsageTracker:
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
 
     def get_current_tts_usage(self):
         """Get length of speech generated for today and this month.
@@ -500,7 +570,7 @@ class UsageTracker:
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+            json.dump(self.usage, outfile, indent=4)
 
     def add_current_costs(self, request_cost):
         """

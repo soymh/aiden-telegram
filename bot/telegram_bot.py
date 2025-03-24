@@ -25,7 +25,7 @@ from PIL import Image
 from utils import is_group_chat, get_thread_id, message_text, wrap_with_indicator, split_into_chunks, \
     edit_message_with_retry, get_stream_cutoff_values, is_allowed, get_remaining_budget, is_admin, is_within_budget, \
     get_reply_to_message_id, add_chat_request_to_usage_tracker, error_handler, is_direct_result, handle_direct_result, \
-    cleanup_intermediate_files
+    cleanup_intermediate_files , is_forbidden
 from openai_helper import OpenAIHelper, default_max_tokens, are_functions_available , localized_text
 from usage_tracker import UsageTracker
 
@@ -45,53 +45,25 @@ class ChatGPTTelegramBot:
         :param openai: OpenAIHelper object
         """
         first_admin = os.environ.get('ADMIN_USER_IDS','0').split(',')[0]
-        admin_tracker = UsageTracker(user_id=first_admin, user_name='admin',default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
+        admin_tracker = UsageTracker(user_id=first_admin, username='admin', chat_id=first_admin, default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
         users_directory = admin_tracker.logs_dir
         allowed_user_ids_list = [
             filename[:-5] for filename in os.listdir(users_directory)
             if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
         ]
-        self.user_id = ""
+        self.user_id = int()
         self.username = ""
+        self.chat_id = int()
         self.usage = {}
-        self.usage[self.user_id] = UsageTracker(self.user_id , self.username)
-        self.usage[self.user_id].add_new_user()
+        self.usage[self.user_id] = UsageTracker(self.user_id , self.username, self.chat_id)
+        # self.usage[self.user_id].save_state()
 
         self.logs_dir = "user_logs"
 
-        self.config = {
-        'token': os.environ['TELEGRAM_BOT_TOKEN'],
-        'admin_user_id': os.environ.get('ADMIN_USER_IDS', '-'),
-        'is_admin': self.user_id == os.environ.get('ADMIN_USER_IDS', '-'),
-        'allow_group_users':self.usage[self.user_id].retrieve_config_value('telegram_config','allow_group_users'),
-        'enable_quoting': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_quoting'),
-        'enable_image_generation': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_image_generation'),
-        'enable_transcription': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_transcription'),
-        'enable_vision': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_vision'),
-        'enable_tts_generation': self.usage[self.user_id].retrieve_config_value('telegram_config','enable_tts_generation'),
-        'budget_period': self.usage[self.user_id].retrieve_config_value('telegram_config','budget_period'),
-        'user_budgets': self.usage[self.user_id].retrieve_config_value('telegram_config','user_budgets'),
-        'guest_budget': self.usage[self.user_id].retrieve_config_value('telegram_config','guest_budget'),
-        'stream': self.usage[self.user_id].retrieve_config_value('telegram_config','stream'),
-        'proxy': self.usage[self.user_id].retrieve_config_value('telegram_config','proxy'),
-        'voice_reply_transcript': self.usage[self.user_id].retrieve_config_value('telegram_config','voice_reply_transcript'),
-        'voice_reply_prompts': self.usage[self.user_id].retrieve_config_value('telegram_config','voice_reply_prompts'),
-        'ignore_group_transcriptions': self.usage[self.user_id].retrieve_config_value('telegram_config','ignore_group_transcriptions'),
-        'ignore_group_vision': self.usage[self.user_id].retrieve_config_value('telegram_config','ignore_group_vision'),
-        'group_trigger_keyword': self.usage[self.user_id].retrieve_config_value('telegram_config','group_trigger_keyword'),
-        'mod_trigger_keyword': self.usage[self.user_id].retrieve_config_value('telegram_config','mod_trigger_keyword'),
-        'token_price': self.usage[self.user_id].retrieve_config_value('telegram_config','token_price'),
-        'image_prices': self.usage[self.user_id].retrieve_config_value('telegram_config','image_prices'),
-        'vision_token_price': self.usage[self.user_id].retrieve_config_value('telegram_config','vision_token_price'),
-        'image_receive_mode': self.usage[self.user_id].retrieve_config_value('telegram_config','image_receive_mode'),
-        'tts_model': self.usage[self.user_id].retrieve_config_value('telegram_config','tts_model'),
-        'tts_prices': self.usage[self.user_id].retrieve_config_value('telegram_config','tts_prices'),
-        'transcription_price': self.usage[self.user_id].retrieve_config_value('telegram_config','transcription_price'),
-        'bot_language': self.usage[self.user_id].retrieve_config_value('telegram_config','bot_language') if self.usage[self.user_id].retrieve_config_value('telegram_config','bot_language') else 'en',
-    }
+        self.config = self.usage[self.user_id].return_configs('telegram')
 
         self.openai = openai
-        bot_language = self.config['bot_language']
+        bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
         self.commands = [
             BotCommand(command='help', description=localized_text('help_description', bot_language)),
             BotCommand(command='reset', description=localized_text('reset_description', bot_language)),
@@ -113,7 +85,7 @@ class ChatGPTTelegramBot:
         BotCommand(
             command='moderate', description=localized_text('moderate_description', bot_language)
         )] + self.commands
-        self.disallowed_message = localized_text('disallowed', bot_language)
+        self.disallowed_message = "Sorry...\n You are not allowed to use this bot."
         self.budget_limit_message = localized_text('budget_limit', bot_language)
         self.last_message = {}
         self.inline_queries_cache = {}
@@ -125,15 +97,14 @@ class ChatGPTTelegramBot:
         set the default user id
         """
         user = update.effective_user
-
+        chat_id = update.effective_chat.id
         self.user_id = user.id
         self.username = user.name
-        self.usage[self.user_id] = UsageTracker(self.user_id , self.username)
-        self.usage[self.user_id].add_new_user()
-
+        self.chat_id = chat_id
+        self.usage[self.user_id] = UsageTracker(self.user_id , self.username, self.chat_id)
         self.config = self.usage[self.user_id].return_configs('telegram')
-        logging.info(f"config for the user {self.user_id}:{self.username} now is :{self.config}")
-
+        self.usage[self.user_id].save_state()
+        self.bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
 
     async def help(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         """
@@ -157,6 +128,8 @@ class ChatGPTTelegramBot:
         """
         Returns token usage statistics for current day and month.
         """
+        await self.user_update(update,context)
+
         if not await is_allowed(self.config, update, context):
             logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
                             'is not allowed to request their usage statistics')
@@ -179,7 +152,7 @@ class ChatGPTTelegramBot:
         current_cost = self.usage[user_id].get_current_cost()
 
         chat_id = update.effective_chat.id
-        chat_messages, chat_token_length = self.openai.get_conversation_stats(chat_id)
+        chat_messages, chat_token_length = self.openai.get_conversation_stats(self.user_id, self.username, chat_id, self.user_id, self.username)
         remaining_budget = get_remaining_budget(self.config, self.usage, update)
         bot_language = self.config['bot_language']
         
@@ -291,6 +264,8 @@ class ChatGPTTelegramBot:
         """
         Resets the conversation.
         """
+        await self.user_update(update,context)
+
         if not await is_allowed(self.config, update, context):
             logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
                             'is not allowed to reset the conversation')
@@ -302,7 +277,7 @@ class ChatGPTTelegramBot:
 
         chat_id = update.effective_chat.id
         reset_content = message_text(update.message)
-        self.openai.reset_chat_history(chat_id=chat_id, content=reset_content)
+        self.openai.reset_chat_history(self.user_id, self.username, chat_id=chat_id, content=reset_content)
         await update.effective_message.reply_text(
             message_thread_id=get_thread_id(update),
             text=localized_text('reset_done', self.config['bot_language'])
@@ -312,6 +287,8 @@ class ChatGPTTelegramBot:
         """
         Generates an image for the given prompt using either OpenAI or FLUX APIs based on the openai_api_url configuration
         """
+        await self.user_update(update,context)
+
         if not self.config['enable_image_generation'] \
         or not await self.check_allowed_and_within_budget(update, context):
             return
@@ -331,7 +308,7 @@ class ChatGPTTelegramBot:
             try:
                 if os.getenv("FLUX_GEN",'false') == 'true':
                     # Use FLUX API
-                    b64_json, image_size = await self.openai.generate_image_flux(prompt=image_query)
+                    b64_json, image_size = await self.openai.generate_image_flux(self.user_id, self.username, self.chat_id, prompt=image_query)
                     # Decode the base64 JSON to get the image data
                     image_data = base64.b64decode(b64_json)
                     image_bytes = BytesIO(image_data)
@@ -351,7 +328,7 @@ class ChatGPTTelegramBot:
                         raise Exception(f"env variable IMAGE_RECEIVE_MODE has invalid value {self.config['image_receive_mode']}")
                 else:
                     # Use OpenAI API
-                    image_url, image_size = await self.openai.generate_image(prompt=image_query)
+                    image_url, image_size = await self.openai.generate_image(self.user_id, self.username, self.chat_id, prompt=image_query)
                     if self.config['image_receive_mode'] == 'photo':
                         await update.effective_message.reply_photo(
                             reply_to_message_id=get_reply_to_message_id(self.config, update),
@@ -388,6 +365,8 @@ class ChatGPTTelegramBot:
         """
         Generates an speech for the given input using TTS APIs
         """
+        await self.user_update(update,context)
+
         if not self.config['enable_tts_generation'] \
                 or not await self.check_allowed_and_within_budget(update, context):
             return
@@ -405,7 +384,7 @@ class ChatGPTTelegramBot:
 
         async def _generate():
             try:
-                speech_file, text_length = await self.openai.generate_speech(text=tts_query)
+                speech_file, text_length = await self.openai.generate_speech(self.user_id, self.username, text=tts_query)
 
                 await update.effective_message.reply_voice(
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
@@ -434,6 +413,8 @@ class ChatGPTTelegramBot:
         """
         Transcribe audio messages.
         """
+        await self.user_update(update,context)
+
         if not self.config['enable_transcription'] or not await self.check_allowed_and_within_budget(update, context):
             return
 
@@ -481,11 +462,12 @@ class ChatGPTTelegramBot:
                 return
 
             user_id = update.message.from_user.id
+            username =update.message.from_user.name
             if user_id not in self.usage:
-                self.usage[user_id] = UsageTracker(user_id, update.message.from_user.name)
+                self.usage[user_id] = UsageTracker(user_id, username)
 
             try:
-                transcript = await self.openai.transcribe(filename_mp3)
+                transcript = await self.openai.transcribe(self.user_id, self.username, filename_mp3)
 
                 transcription_price = self.config['transcription_price']
                 self.usage[user_id].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
@@ -513,7 +495,7 @@ class ChatGPTTelegramBot:
                         )
                 else:
                     # Get the response of the transcript
-                    response, total_tokens = await self.openai.get_chat_response(chat_id=chat_id, role="user", query=transcript)
+                    response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=transcript)
 
                     self.usage[user_id].add_chat_tokens(total_tokens, self.config['token_price'])
                     if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
@@ -619,7 +601,7 @@ class ChatGPTTelegramBot:
 
             if self.config['stream']:
 
-                stream_response = self.openai.interpret_image_stream(chat_id=chat_id, fileobj=temp_file_png, prompt=prompt)
+                stream_response = self.openai.interpret_image_stream(self.user_id, self.username, chat_id=chat_id, fileobj=temp_file_png, prompt=prompt)
                 i = 0
                 prev = ''
                 sent_message = None
@@ -700,7 +682,7 @@ class ChatGPTTelegramBot:
             else:
 
                 try:
-                    interpretation, total_tokens = await self.openai.interpret_image(chat_id, temp_file_png, prompt=prompt)
+                    interpretation, total_tokens = await self.openai.interpret_image(self.user_id, self.username, chat_id, temp_file_png, prompt=prompt)
 
 
                     try:
@@ -744,6 +726,7 @@ class ChatGPTTelegramBot:
 
     async def process_openai_response(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt, chat_id, role:str, super_access=False):
         total_tokens = 0
+        await self.user_update(update,context)
 
         try:
             # Handle streaming response
@@ -753,7 +736,7 @@ class ChatGPTTelegramBot:
                     message_thread_id=get_thread_id(update)
                 )
 
-                stream_response = self.openai.get_chat_response_stream(chat_id=chat_id, role=role, query=prompt, super_access=super_access)
+                stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
                 i = 0
                 prev = ''
                 sent_message = None
@@ -763,7 +746,8 @@ class ChatGPTTelegramBot:
                 async for content, tokens in stream_response:
                     if is_direct_result(content):
                         direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
-                        direct_caption , direct_tokens = await self.openai.get_chat_response(chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        direct_caption , direct_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_tokens)
                         # logging.info(f"direct caption is : {direct_caption}")
                         total_tokens += direct_tokens
                         return await handle_direct_result(self.config, update, content , direct_caption)
@@ -838,12 +822,12 @@ class ChatGPTTelegramBot:
             else:
                 async def _reply():
                     nonlocal total_tokens
-                    response, total_tokens = await self.openai.get_chat_response(chat_id=chat_id, role=role, query=prompt, super_access=super_access)
+                    response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
 
                     if is_direct_result(response):
                         direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
-                        direct_caption , direct_tokens = await self.openai.get_chat_response(chat_id=chat_id, role="system", query=direct_caption_prompt)
-                        # logging.info(f"direct caption is : {direct_caption}")
+                        direct_caption , direct_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        # logging.info(f"direct caption is : {direct_caption} and direct token: {direct_tokens}")
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_tokens)
                         return await handle_direct_result(self.config, update, response , direct_caption)
 
@@ -1189,6 +1173,8 @@ class ChatGPTTelegramBot:
         """
         Handle the callback query from the inline query result
         """
+        await self.user_update(update,context)
+
         callback_data = update.callback_query.data
         user_id = update.callback_query.from_user.id
         inline_message_id = update.callback_query.inline_message_id
@@ -1220,7 +1206,7 @@ class ChatGPTTelegramBot:
 
                 unavailable_message = localized_text("function_unavailable_in_inline_mode", bot_language)
                 if self.config['stream']:
-                    stream_response = self.openai.get_chat_response_stream(chat_id=user_id, role="user", query=query)
+                    stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=user_id, role="user", query=query)
                     i = 0
                     prev = ''
                     backoff = 0
@@ -1288,7 +1274,7 @@ class ChatGPTTelegramBot:
                                                             parse_mode=constants.ParseMode.MARKDOWN)
 
                         logging.info(f'Generating response for inline query by {name}')
-                        response, total_tokens = await self.openai.get_chat_response(chat_id=user_id, role="user", query=query)
+                        response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=user_id, role=role, query=query)
 
                         if is_direct_result(response):
                             cleanup_intermediate_files(response)
@@ -1343,10 +1329,13 @@ class ChatGPTTelegramBot:
 
         return True
 
-    async def send_disallowed_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE, is_inline=False):
+    async def send_disallowed_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline=False):
         """
         Sends the disallowed message to the user along with a join request button.
         """
+        if await is_forbidden(self.config,update,context) or await is_allowed(self.config,update,context):
+            return
+            
         join_button = InlineKeyboardButton(
             "I wanna join the Bot users!",
             callback_data=f"join_request:{update.effective_user.id}"
@@ -1413,7 +1402,7 @@ class ChatGPTTelegramBot:
         user_id = int(user_id_str)
         
         if action == "admin_approve":
-            self.usage[user_id] = UsageTracker(user_id, user.username)
+            self.usage[user_id] = UsageTracker(user_id, user.username, user_id)
             self.awaiting_users.remove(user_id)
             self.usage[user_id].update_telegram_config(True,'is_allowed',True)
             await context.bot.send_message(
@@ -1422,6 +1411,8 @@ class ChatGPTTelegramBot:
             )
             response_text = f"User {user_id} has been approved."
         elif action == "admin_deny":
+            self.awaiting_users.remove(user_id)
+            self.usage[user_id].update_telegram_config(True,'id_forbidden',True)
             await context.bot.send_message(
                 chat_id=user_id,
                 text="Sorry, you are not granted access to use the bot by the admin."
@@ -1467,7 +1458,8 @@ class ChatGPTTelegramBot:
         admin_check = is_admin(self.config, user.id)
 
         if not is_admin(self.config,user.id):
-            await self.send_disallowed_message(update,context)
+            if await is_allowed(self.config, update, context):
+                await self.send_disallowed_message(update,context)
             return
         
         # Check for list and permit actions separately.
@@ -1495,7 +1487,7 @@ class ChatGPTTelegramBot:
                             data = json.load(f)
                         # Check if telegram_config and the "is_allowed" flag exist and are True
                         if data.get("telegram_config", {}).get("is_allowed", False):
-                            allowed_users.append(f"{file_name[:-5]}: {data.get('user_name', 'N/A')}")
+                            allowed_users.append(f"{file_name[:-5]}: {data.get('username', 'N/A')}")
                     except Exception as e:
                         # Log or skip any files that can't be read
                         logging.info(f"error while getting allowed users list: {e}")

@@ -156,45 +156,14 @@ async def is_allowed(config, update: Update, context: CallbackContext, is_inline
     # Using the new dynamic structure for users 
     return config['is_allowed']
 
-    # Extract user id and name from update based on inline flag
-    if is_inline:
-        user_id = update.inline_query.from_user.id
-        name = update.inline_query.from_user.name
-    else:
-        user_id = update.message.from_user.id
-        name = update.message.from_user.name
-
-    # Allow if admin
-    if is_admin(config, user_id):
-        return True
-
-    # Use the default logs_dir from UsageTracker by creating a dummy instance.
-    first_admin=config['admin_user_ids'].split(',')[0]
-    admin_tracker = UsageTracker(user_id=first_admin, user_name='admin')
-    directory = admin_tracker.logs_dir
-
-    # Get list of user file names (assumed to be user_id.json files)
-    # If needed, remove the '.json' extension so they match the user_id format.
-    allowed_user_ids = [
-        filename[:-5] for filename in os.listdir(directory)
-        if os.path.isfile(os.path.join(directory, filename)) and filename.lower().endswith('.json')
-    ]
-
-    # Check if current user_id (as string) is in allowed_user_ids
-    if str(user_id) in allowed_user_ids:
-        return True
-
-    # Check if it's a group chat with at least one authorized member.
-    if not is_inline and is_group_chat(update):
-        admin_user_ids = config['admin_user_ids'].split(',')
-        for user in itertools.chain(allowed_user_ids, admin_user_ids):
-            if not user.strip():
-                continue
-            if await is_user_in_group(update, context, user) and config.get('allow_group_users', False):
-                logging.info(f'{user} is a member. Allowing group chat message...')
-                return True
-        logging.info(f'Group chat messages from user {name} (id: {user_id}) are not allowed')
-    return False
+async def is_forbidden(config, update: Update, context: CallbackContext, is_inline=False) -> bool:
+    """
+    Checks if the user is allowed to use the bot.
+    """
+    user = update.effective_user
+    user_id = user.id
+    # Using the new dynamic structure for users 
+    return config['is_forbidden']
 
 
 def is_admin(config, user_id: int) -> bool:
