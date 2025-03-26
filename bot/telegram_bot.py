@@ -69,7 +69,7 @@ class ChatGPTTelegramBot:
             BotCommand(command='reset', description=localized_text('reset_description', bot_language)),
             BotCommand(command='stats', description=localized_text('stats_description', bot_language)),
             BotCommand(command='resend', description=localized_text('resend_description', bot_language)),
-            BotCommand(command='setconfig', description="a command to modify the configs")
+            BotCommand(command='setconfig', description=localized_text('setconfig_description', bot_language))
 
         ]
         # If imaging is enabled, add the "image" command to the list
@@ -1443,54 +1443,108 @@ class ChatGPTTelegramBot:
         """
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
+    # Helper: returns a formatted table string with all users from self.logs_dir
+    def get_all_users_table(self) -> str:
+        """
+        Returns a table (as a string) of all users read from self.logs_dir,
+        with columns for UserID, Username, and Allowed status.
+        """
+        header = f"{'User ID':<12} | {'Username':<20} | {'Allowed':<7}\n"
+        header += "-" * 50 + "\n"
+        rows = []
+        for file_name in os.listdir(self.logs_dir):
+            if file_name.endswith(".json"):
+                file_path = os.path.join(self.logs_dir, file_name)
+                try:
+                    with open(file_path, "r") as f:
+                        data = json.load(f)
+                    user_id = file_name[:-5]  # remove .json extension
+                    username = data.get("username", "N/A")
+                    # We assume that in telegram_config, is_allowed exists.
+                    allowed = data.get("telegram_config", {}).get("is_allowed", False)
+                    rows.append(f"{user_id:<12} | {username:<20} | {str(allowed):<7}")
+                except Exception as e:
+                    logging.info(f"Error reading file {file_name}: {e}")
+                    continue
+        if rows:
+            return header + "\n".join(rows)
+        else:
+            return "No users found."
 
+    # Helper: permit/disallow a user by updating its JSON file
+    async def update_user_permission(self, update: Update, target_user_id: str, new_status: bool) -> bool:
+        """
+        Updates the permission status of the target user.
+        Returns True if successful, False otherwise.
+        """
+        file_path = os.path.join(self.logs_dir, f"{target_user_id}.json")
+        if not os.path.isfile(file_path):
+            await update.message.reply_text("User file not found.")
+            return False
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+            if "telegram_config" in data:
+                data["telegram_config"]["is_allowed"] = new_status
+            else:
+                data["telegram_config"] = {"is_allowed": new_status}
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=4)
+            await update.message.reply_text(f"User {target_user_id} allowed status updated to {new_status}.")
+            return True
+        except Exception as e:
+            logging.info(f"Failed to update user file: {e}")
+            await update.message.reply_text("Failed to update user file.")
+            return False
+
+    # Main command handler
     async def config_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Handle configuration commands for:
         - get: /setconfig get <openai|telegram> <config_key>
         - set: /setconfig set <openai|telegram> <config_key> <new_value>
-        - list: /setconfig list
+        - list: /setconfig list    (lists allowed users only)
+        - all: /setconfig all      (lists all users with permission status)
         - permit: /setconfig permit <user_id> <true|false>
         """
-        await self.user_update(update,context)
-
+        # Update the current user data
+        await self.user_update(update, context)
         user = update.effective_user
         admin_check = is_admin(self.config, user.id)
-
-        if not is_admin(self.config,user.id):
+        # Only admins can run these commands
+        if not admin_check:
             if await is_allowed(self.config, update, context):
-                await self.send_disallowed_message(update,context)
+                await self.send_disallowed_message(update, context)
             return
-        
-        # Check for list and permit actions separately.
+
+        # If no arguments, show usage instructions.
         if not context.args:
             await update.message.reply_text(
                 "Usage:\n"
-                "  To get: /setconfig get <openai|telegram> <config_key>\n"
-                "  To set: /setconfig set <openai|telegram> <config_key> <new_value>\n"
+                "  To get:    /setconfig get <openai|telegram> <config_key>\n"
+                "  To set:    /setconfig set <openai|telegram> <config_key> <new_value>\n"
                 "  To list allowed users: /setconfig list\n"
+                "  To list all users:     /setconfig all\n"
                 "  To permit/disallow a user: /setconfig permit <user_id> <true|false>"
             )
             return
 
         action = context.args[0].lower()
 
-        # --- List allowed users ---
+        # --- Branch: list allowed users ---
         if action == "list":
             allowed_users = []
-            # Assume self.logs_dir holds the path to user JSON files.
             for file_name in os.listdir(self.logs_dir):
                 if file_name.endswith(".json"):
                     file_path = os.path.join(self.logs_dir, file_name)
                     try:
                         with open(file_path, "r") as f:
                             data = json.load(f)
-                        # Check if telegram_config and the "is_allowed" flag exist and are True
+                        # Check for allowed users in telegram_config
                         if data.get("telegram_config", {}).get("is_allowed", False):
                             allowed_users.append(f"{file_name[:-5]}: {data.get('username', 'N/A')}")
                     except Exception as e:
-                        # Log or skip any files that can't be read
-                        logging.info(f"error while getting allowed users list: {e}")
+                        logging.info(f"Error while getting allowed users list: {e}")
                         continue
             if allowed_users:
                 msg = "Allowed users:\n" + "\n".join(allowed_users)
@@ -1499,9 +1553,14 @@ class ChatGPTTelegramBot:
             await update.message.reply_text(msg)
             return
 
-        # --- Permit/disallow a user ---
+        # --- Branch: list all users ---
+        if action == "all":
+            table = self.get_all_users_table()
+            await update.message.reply_text(table)
+            return
+
+        # --- Branch: permit/disallow a user ---
         if action == "permit":
-            # Expected: /setconfig permit <user_id> <true|false>
             if len(context.args) != 3:
                 await update.message.reply_text("Usage: /setconfig permit <user_id> <true|false>")
                 return
@@ -1511,31 +1570,15 @@ class ChatGPTTelegramBot:
                 await update.message.reply_text("The allowed status must be 'true' or 'false'.")
                 return
             new_status = new_status_str == "true"
-            file_path = os.path.join(self.logs_dir, f"{target_user_id}.json")
-            if not os.path.isfile(file_path):
-                await update.message.reply_text("User file not found.")
-                return
-            try:
-                with open(file_path, "r") as f:
-                    data = json.load(f)
-                # Update allowed status in telegram_config
-                if "telegram_config" in data:
-                    data["telegram_config"]["is_allowed"] = new_status
-                else:
-                    data["telegram_config"] = {"is_allowed": new_status}
-                with open(file_path, "w") as f:
-                    json.dump(data, f, indent=4)
-                await update.message.reply_text(f"User {target_user_id} allowed status updated to {new_status}.")
-            except Exception as e:
-                await update.message.reply_text("Failed to update user file.")
+            await update_user_permission(self, update, target_user_id, new_status)
             return
 
-        # --- For get and set actions ---
-        # Ensure at least 3 arguments are provided for get, and 4 for set.
+        # --- Branch: get and set configuration values ---
         if action not in ("get", "set"):
-            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', or 'permit'.")
+            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', 'all', or 'permit'.")
             return
 
+        # For get and set, we need at least three arguments.
         if len(context.args) < 3:
             await update.message.reply_text(
                 "Usage:\n"
@@ -1547,7 +1590,7 @@ class ChatGPTTelegramBot:
         config_type = context.args[1].lower()
         key = context.args[2]
 
-        # Assume self.usage is a dict keyed by user id.
+        # Ensure we have a configuration manager for the user.
         if user.id not in self.usage:
             await update.message.reply_text("Configuration manager for your user was not found.")
             return
@@ -1585,7 +1628,8 @@ class ChatGPTTelegramBot:
                 else:
                     await update.message.reply_text("Key not found in Telegram config.")
             else:
-                await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")            
+                await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
+
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C

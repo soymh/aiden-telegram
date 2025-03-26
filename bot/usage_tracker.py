@@ -140,7 +140,6 @@ class UsageTracker:
             # Conversation Settings
             'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
         }
-
         self.conversations: dict[int: list] = {self.chat_id:[]}  # {chat_id: history}  
         self.conversations_vision: dict[str: bool] = {self.chat_id:bool()}  # {chat_id: is_vision}
         self.last_updated: dict[int: str] = {self.chat_id:str()}  # {chat_id: last_update_timestamp}
@@ -167,7 +166,13 @@ class UsageTracker:
                 "vision_conversations": self.conversations_vision,
                 "last_updated": self.last_updated,
             }
-            
+
+        self.openai_keys = {key for key in self.openai_config.keys()}
+        self.openai_exclude = {'flux_base_url', 'vision_max_tokens', 'enable_vision_follow_up_questions', 'whisper_prompt', 'functions_max_consecutive_calls'}
+
+        self.telegram_keys = {key for key in self.telegram_config.keys()}
+        self.tel_exclude = {'token', 'admin_user_id', 'allowed_user_ids', 'is_admin', 'is_allowed', 'is_forbidden', 'budget_period', 'user_budgets', 'guest_budget', 'token_price', 'image_prices', 'transcription_price', 'vision_token_price', 'tts_prices', 'proxy'}
+                            
 
     def save_state(self):
         """
@@ -258,28 +263,14 @@ class UsageTracker:
         
         Returns True if the update was successful, else False.
         """
-        admin_allowed_keys = {
-            'assistant_prompt', 'max_history_size', 'max_conversation_age_minutes',
-            'temperature', 'show_usage', 'stream', 'bot_language', 'image_model',
-            'image_quality', 'image_style', 'flux_base_url', 'vision_model', 'vision_prompt',
-            'tts_model', 'tts_voice', 'enable_functions', 'functions_max_consecutive_calls',
-            'show_plugins_used'
-        }
-
-        allowed_keys = {
-            'assistant_prompt', 'max_history_size', 'max_conversation_age_minutes',
-            'temperature', 'show_usage', 'stream', 'bot_language', 'image_model',
-            'image_quality', 'image_style', 'flux_base_url', 'vision_model', 'vision_prompt',
-            'tts_model', 'tts_voice', 'enable_functions', 'functions_max_consecutive_calls',
-            'show_plugins_used'
-        }
+        
         if is_admin:
-            if str(key) not in admin_allowed_keys:
+            if str(key) not in self.openai_keys:
                 return False
             if str(key) not in self.usage['openai_config']:
                 return False
         else:
-            if str(key) not in allowed_keys:
+            if str(key) in self.openai_exclude:
                 return False
             if str(key) not in self.usage['openai_config']:
                 return False
@@ -288,6 +279,7 @@ class UsageTracker:
         self.usage['openai_config'][key] = new_val
         with open(self.user_file, "w") as outfile:
             json.dump(self.usage, outfile, indent=4)
+        return True
     def update_telegram_config(self, is_admin:bool, key: str, new_val_str: str) -> bool:
         """
         Updates a Telegram configuration value if the key is allowed.
@@ -298,21 +290,14 @@ class UsageTracker:
         
         Returns True if the update was successful, else False.
         """
-        allowed_keys = {
-            'mod_bot_token', 'group_id' , 'group_trigger_keyword', 'mod_trigger_keyword',
-            'allow_group_users', 'budget_period', 'user_budgets', 'bot_language'
-        }
-        allowed_keys_admin = {
-            'mod_bot_token', 'group_id' , 'group_trigger_keyword', 'mod_trigger_keyword',
-            'allow_group_users', 'budget_period', 'user_budgets', 'bot_language' , 'is_allowed'
-        }
+
         if is_admin:    
-            if str(key) not in allowed_keys_admin:
+            if str(key) not in self.telegram_keys:
                 return False
             if str(key) not in self.usage['telegram_config']:
                 return False
         else:
-            if str(key) not in allowed_keys:
+            if str(key) in self.tel_exclude:
                 return False
             if str(key) not in self.usage['telegram_config']:
                 return False
@@ -321,6 +306,7 @@ class UsageTracker:
         self.usage['telegram_config'][key] = new_val
         with open(self.user_file, "w") as outfile:
             json.dump(self.usage, outfile, indent=4)
+        return True
 
     def retrieve_config_value(self, config_type: str, key: str):
         """
