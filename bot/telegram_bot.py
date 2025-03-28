@@ -55,6 +55,7 @@ class ChatGPTTelegramBot:
         self.username = ""
         self.chat_id = int()
         self.usage = {}
+        self.conversations: dict[int: list] = {}
         self.usage[self.user_id] = UsageTracker(self.user_id , self.username, self.chat_id)
         # self.usage[self.user_id].save_state()
 
@@ -63,7 +64,7 @@ class ChatGPTTelegramBot:
         self.config = self.usage[self.user_id].return_configs('telegram')
 
         self.openai = openai
-        bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
+        dummy, bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
         self.commands = [
             BotCommand(command='help', description=localized_text('help_description', bot_language)),
             BotCommand(command='reset', description=localized_text('reset_description', bot_language)),
@@ -104,7 +105,8 @@ class ChatGPTTelegramBot:
         self.usage[self.user_id] = UsageTracker(self.user_id , self.username, self.chat_id)
         self.config = self.usage[self.user_id].return_configs('telegram')
         self.usage[self.user_id].save_state()
-        self.bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
+        self.conversations = self.usage[self.user_id].do_conversations(chat_id=chat_id)
+        dummy, self.bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
 
     async def help(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         """
@@ -496,10 +498,11 @@ class ChatGPTTelegramBot:
                 else:
                     # Get the response of the transcript
                     response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=transcript)
+                    
+                    self.usage[user_id].add_chat_tokens(tokens=total_tokens)
 
-                    self.usage[user_id].add_chat_tokens(total_tokens, self.config['token_price'])
                     if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
-                        self.usage["guests"].add_chat_tokens(total_tokens, self.config['token_price'])
+                        self.usage["guests"].add_chat_tokens(total_tokens)
 
                     # Split into chunks of 4096 characters (Telegram's message limit)
                     transcript_output = (
@@ -737,6 +740,7 @@ class ChatGPTTelegramBot:
                 )
 
                 stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
+                self.usage[user_id].add_chat_tokens(type="input",tokens=prompt)
                 i = 0
                 prev = ''
                 sent_message = None
@@ -748,6 +752,7 @@ class ChatGPTTelegramBot:
                         direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
                         direct_caption , direct_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_tokens)
+                        self.usage[user_id].add_chat_tokens(tokens=direct_tokens)
                         # logging.info(f"direct caption is : {direct_caption}")
                         total_tokens += direct_tokens
                         return await handle_direct_result(self.config, update, content , direct_caption)
@@ -823,10 +828,12 @@ class ChatGPTTelegramBot:
                 async def _reply():
                     nonlocal total_tokens
                     response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
+                    self.usage[user_id].add_chat_tokens(type="input",tokens=prompt)
 
                     if is_direct_result(response):
                         direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
                         direct_caption , direct_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        self.usage[user_id].add_chat_tokens(tokens=direct_tokens)
                         # logging.info(f"direct caption is : {direct_caption} and direct token: {direct_tokens}")
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_tokens)
                         return await handle_direct_result(self.config, update, response , direct_caption)
@@ -873,8 +880,8 @@ class ChatGPTTelegramBot:
         Handles channel-related commands: forwarding or sending messages based on keywords.
         """
         user = update.effective_user
-        FORWARD_KEYWORD = self.usage[user.id].retrieve_config_value('telegram_config','forward_keyword') if user.id in self.usage else "None"
-        CHANNEL_ID = self.usage[user.id].retrieve_config_value('telegram_config','channel_id') if user.id in self.usage else "None"
+        dummy, FORWARD_KEYWORD = self.usage[user.id].retrieve_config_value('telegram_config','forward_keyword') if user.id in self.usage else "None"
+        dummy, CHANNEL_ID = self.usage[user.id].retrieve_config_value('telegram_config','channel_id') if user.id in self.usage else "None"
         if prompt.lower().startswith(FORWARD_KEYWORD.lower()):
             # Extract the part of the prompt after the forward keyword and strip spaces.
             user_input_after_keyword = prompt[len(FORWARD_KEYWORD):].strip()
@@ -1207,6 +1214,7 @@ class ChatGPTTelegramBot:
                 unavailable_message = localized_text("function_unavailable_in_inline_mode", bot_language)
                 if self.config['stream']:
                     stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=user_id, role="user", query=query)
+                    self.usage[user_id].add_chat_tokens(type="input",tokens=query)
                     i = 0
                     prev = ''
                     backoff = 0
@@ -1275,6 +1283,7 @@ class ChatGPTTelegramBot:
 
                         logging.info(f'Generating response for inline query by {name}')
                         response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=user_id, role=role, query=query)
+                        self.usage[user_id].add_chat_tokens(type="input",tokens=query)
 
                         if is_direct_result(response):
                             cleanup_intermediate_files(response)
@@ -1616,14 +1625,14 @@ class ChatGPTTelegramBot:
                 await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
         elif action == "get":
             if config_type == "openai":
-                current_value = self.usage[user.id].openai_config.get(key, None)
-                if current_value is not None:
+                done, current_value = self.usage[user.id].retrieve_config_value('openai',key,admin_check)
+                if done and current_value is not None:
                     await update.message.reply_text(f"Current OpenAI config: {key} = {current_value}")
                 else:
                     await update.message.reply_text("Key not found in OpenAI config.")
             elif config_type == "telegram":
-                current_value = self.usage[user.id].telegram_config.get(key, None)
-                if current_value is not None:
+                done, current_value = self.usage[user.id].retrieve_config_value('telegram',key,admin_check)
+                if done and current_value is not None:
                     await update.message.reply_text(f"Current Telegram config: {key} = {current_value}")
                 else:
                     await update.message.reply_text("Key not found in Telegram config.")

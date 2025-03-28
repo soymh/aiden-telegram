@@ -69,7 +69,7 @@ class UsageTracker:
             'image_style': os.environ.get('IMAGE_STYLE', 'vivid'),
             'image_size': os.environ.get('IMAGE_SIZE', '1024x1024'),
             'flux_base_url': os.environ.get('FLUX_BASE_URL', 'https://api.together.xyz/v1'),
-            'vision_model': os.environ.get('VISION_MODEL', 'gpt-4o'),
+            'vision_model': os.environ.get('VISION_MODEL', 'gpt-4o-mini-2024-07-18'),
             'vision_prompt': os.environ.get('VISION_PROMPT', 'What is in this image'),
             'vision_detail': os.environ.get('VISION_DETAIL', 'auto'),
             'vision_max_tokens': int(os.environ.get('VISION_MAX_TOKENS', '300')),
@@ -119,8 +119,10 @@ class UsageTracker:
             'budget_period': os.environ.get('BUDGET_PERIOD', 'monthly').lower(),
             'user_budgets': os.environ.get('USER_BUDGETS', os.environ.get('MONTHLY_USER_BUDGETS', '*')),
             'guest_budget': float(os.environ.get('GUEST_BUDGET', os.environ.get('MONTHLY_GUEST_BUDGET', '100.0'))),
-            'token_price': float(os.environ.get('TOKEN_PRICE', 0.002)),
-            'image_prices': [float(i) for i in os.environ.get('IMAGE_PRICES', "0.016,0.018,0.02").split(",")],
+            'input_token_price': float(os.environ.get('INPUT_TOKEN_PRICE', 0.00015)),
+            'output_token_price': float(os.environ.get('OUTPUT_TOKEN_PRICE', 0.0006)),
+            'cached_token_price': float(os.environ.get('CACHED_TOKEN_PRICE', 0.000075)),
+            'image_prices': [float(i) for i in os.environ.get('IMAGE_PRICES', "0.016,0.018,0.04").split(",")],
             'transcription_price': float(os.environ.get('TRANSCRIPTION_PRICE', 0.006)),
             'vision_token_price': float(os.environ.get('VISION_TOKEN_PRICE', '0.01')),
             'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
@@ -308,7 +310,7 @@ class UsageTracker:
             json.dump(self.usage, outfile, indent=4)
         return True
 
-    def retrieve_config_value(self, config_type: str, key: str):
+    def retrieve_config_value(self, config_type: str, key: str, is_admin = False):
         """
         Retrieves the configuration value for the given key from either the OpenAI or Telegram configuration.
 
@@ -321,14 +323,34 @@ class UsageTracker:
         """
         config_type = config_type.lower()
         if config_type == 'openai':
+            if is_admin:
+                if str(key) not in self.openai_keys:
+                    return False, None
+                if str(key) not in self.usage['openai_config']:
+                    return False, None
+            else:
+                if str(key) in self.openai_exclude:
+                    return False, None
+                if str(key) not in self.usage['openai_config']:
+                    return False, None
             config = self.usage.get('openai_config', {})
         elif config_type == 'telegram':
+            if is_admin:
+                if str(key) not in self.telegram_keys:
+                    return False, None
+                if str(key) not in self.usage['telegram_config']:
+                    return False, None
+            else:
+                if str(key) in self.tel_exclude:
+                    return False, None
+                if str(key) not in self.usage['telegram_config']:
+                    return False, None
             config = self.usage.get('telegram_config', {})
         else:
             # Invalid configuration type specified.
-            return None
+            return False, None
 
-        return config.get(key)
+        return True, config.get(key)
 
     def return_configs(self, config_type: str):
         """
@@ -341,15 +363,65 @@ class UsageTracker:
         else:
             return None
 
+    def __count_tokens(self, messages) -> int:
+        """
+        Counts the number of tokens required to send the given messages.
+        :param messages: the messages to send
+        :return: the number of tokens required
+        """
+        model = self.config['model']
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+        except KeyError:
+            encoding = tiktoken.get_encoding("o200k_base")
 
-    def add_chat_tokens(self, tokens, tokens_price=0.002):
+        if model in GPT_ALL_MODELS:
+            tokens_per_message = 3
+            tokens_per_name = 1
+        else:
+            raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}.""")
+        num_tokens = 0
+        for message in messages:
+            num_tokens += tokens_per_message
+            for key, value in message.items():
+                if key == 'content':
+                    if isinstance(value, str):
+                        num_tokens += len(encoding.encode(value))
+                    else:
+                        for message1 in value:
+                            if message1['type'] == 'image_url':
+                                image = decode_image(message1['image_url']['url'])
+                                num_tokens += self.__count_tokens_vision(image)
+                            else:
+                                num_tokens += len(encoding.encode(message1['text']))
+                else:
+                    num_tokens += len(encoding.encode(value))
+                    if key == "name":
+                        num_tokens += tokens_per_name
+        num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+        return num_tokens
+
+    def add_chat_tokens(self, tokens, type="output"):
         """
         Atomically updates the user's usage file by reading its current contents,
         merging in the new token usage, and writing the result back.
         This prevents overwriting previously stored data.
         """
+        input_tokens_price = self.usage['telegram_config']['input_token_price']
+        output_token_price = self.usage['telegram_config']['output_token_price']
+        cached_token_price = self.usage['telegram_config']['cached_token_price']
         today = date.today()
-        token_cost = round(float(tokens) * tokens_price / 1000, 6)
+        input_token_cost = 0
+        output_token_cost = 0
+        cached_token_cost = 0
+
+        if type=="input":
+            tokens = self.__count_tokens({"role": "user","content": tokens})
+            input_token_cost = round(float(tokens) * input_tokens_price / 1000, 6)
+            cached_token_cost = self.__count_tokens(self.usage['conversations'])
+        elif type=="output":
+            output_token_cost = round(float(tokens) * output_token_price / 1000, 6)
+        token_cost = input_token_cost + output_token_cost + cached_token_cost
         self.add_current_costs(token_cost)
 
         # First, load current data from file.
@@ -400,12 +472,12 @@ class UsageTracker:
 
     # image usage functions:
 
-    def add_image_request(self, image_size, image_prices="0.016,0.018,0.02"):
+    def add_image_request(self, image_size, image_prices="0.016,0.018,0.04"):
         """Add image request to users usage history and update current costs.
 
         :param image_size: requested image size
         :param image_prices: prices for images of sizes ["256x256", "512x512", "1024x1024"],
-                             defaults to [0.016, 0.018, 0.02]
+                             defaults to [0.016, 0.018, 0.04]
         """
         sizes = ["256x256", "512x512", "1024x1024"]
         requested_size = sizes.index(image_size)

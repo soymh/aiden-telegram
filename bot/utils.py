@@ -270,11 +270,11 @@ def add_chat_request_to_usage_tracker(usage, config, user_id, used_tokens):
             logging.warning('No tokens used. Not adding chat request to usage tracker.')
             return
         # add chat request to users usage tracker
-        usage[user_id].add_chat_tokens(used_tokens, config['token_price'])
+        usage[user_id].add_chat_tokens(used_tokens)
         # add guest chat request to guest usage tracker
         allowed_user_ids = config['allowed_user_ids'].split(',')
         if str(user_id) not in allowed_user_ids and 'guests' in usage:
-            usage["guests"].add_chat_tokens(used_tokens, config['token_price'])
+            usage["guests"].add_chat_tokens(used_tokens)
     except Exception as e:
         logging.warning(f'Failed to add tokens to usage_logs: {str(e)}')
         pass
@@ -319,6 +319,13 @@ async def handle_direct_result(config, update: Update, response: any,direct_capt
     kind = result['kind']
     format = result['format']
     value = result['value']
+    costly = result['costly']
+
+    user = update.effective_user
+    user_id = user.id
+    username = user.name
+    chat_id = update.effective_chat.id
+    usage = UsageTracker(user_id=user_id,username=username,chat_id=chat_id)
 
     common_args = {
         'message_thread_id': get_thread_id(update),
@@ -327,10 +334,13 @@ async def handle_direct_result(config, update: Update, response: any,direct_capt
     }
 
     if kind == 'photo':
+        image_size = result['image_size']
         if format == 'url':
             await update.effective_message.reply_photo(**common_args, photo=value)
         elif format == 'path':
             await update.effective_message.reply_photo(**common_args, photo=open(value, 'rb'))
+        if costly:
+            usage[user_id].add_image_request(image_size, self.config['image_prices'])
     elif kind == 'gif' or kind == 'file':
         if format == 'url':
             i=1
