@@ -347,7 +347,7 @@ class ChatGPTTelegramBot:
                 self.usage[self.user_id].add_image_request(image_size, self.config['image_prices'])
 
                 # Add guest chat request to guest usage tracker
-                if str(user_id) not in self.config['user_ids_list'].split(',') and 'guests' in self.usage:
+                if str(self.user_id) not in self.config['user_ids_list'].split(',') and 'guests' in self.usage:
                     self.usage["guests"].add_image_request(image_size, self.config['image_prices'])
 
             except Exception as e:
@@ -395,7 +395,7 @@ class ChatGPTTelegramBot:
                 # user_id = update.message.from_user.id
                 self.usage[self.user_id].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
                 # add guest chat request to guest usage tracker
-                if str(user_id) not in self.config['user_ids_list'].split(',') and 'guests' in self.usage:
+                if str(self.user_id) not in self.config['user_ids_list'].split(',') and 'guests' in self.usage:
                     self.usage["guests"].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
 
             except Exception as e:
@@ -473,7 +473,7 @@ class ChatGPTTelegramBot:
                 self.usage[self.user_id].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
 
                 user_ids_list = self.config['user_ids_list'].split(',')
-                if str(user_id) not in user_ids_list and 'guests' in self.usage:
+                if str(self.user_id) not in user_ids_list and 'guests' in self.usage:
                     self.usage["guests"].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
 
                 # check if transcript starts with any of the prefixes
@@ -499,7 +499,7 @@ class ChatGPTTelegramBot:
                     
                     # self.usage[self.user_id].add_chat_tokens(input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens)
 
-                    if str(user_id) not in user_ids_list and 'guests' in self.usage:
+                    if str(self.user_id) not in user_ids_list and 'guests' in self.usage:
                         self.usage["guests"].add_chat_tokens(output_tokens=total_tokens)
 
                     # Split into chunks of 4096 characters (Telegram's message limit)
@@ -514,7 +514,7 @@ class ChatGPTTelegramBot:
                             message_thread_id=get_thread_id(update),
                             reply_to_message_id=get_reply_to_message_id(self.config, update) if index == 0 else None,
                             text=transcript_chunk,
-                            parse_mode=constants.ParseMode.MARKDOWN
+                            parse_mode=constants.ParseMode.HTML
                         )
 
             except Exception as e:
@@ -722,7 +722,7 @@ class ChatGPTTelegramBot:
             self.usage[self.user_id].add_vision_tokens(total_tokens, vision_token_price)
 
             user_ids_list = self.config['user_ids_list'].split(',')
-            if str(user_id) not in user_ids_list and 'guests' in self.usage:
+            if str(self.user_id) not in user_ids_list and 'guests' in self.usage:
                 self.usage["guests"].add_vision_tokens(total_tokens, vision_token_price)
 
         await wrap_with_indicator(update, context, _execute, constants.ChatAction.TYPING)

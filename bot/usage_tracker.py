@@ -399,7 +399,7 @@ class UsageTracker:
                    + output_token_cost \
                    + cached_token_cost
 
-        self.add_current_costs(tokens_cost)
+        self.add_current_costs(float(tokens_cost))
 
         # First, load current data from file.
         # current_usage = {}
@@ -470,7 +470,7 @@ class UsageTracker:
         requested_size = sizes.index(image_size)
         image_cost = image_prices[requested_size]
         today = date.today()
-        self.add_current_costs(image_cost)
+        self.add_current_costs(float(image_cost))
 
         # update usage_history
         if "number_images" in self.usage["usage_history"][str(today)]:
@@ -512,7 +512,7 @@ class UsageTracker:
         """
         today = date.today()
         token_price = round(tokens * vision_token_price / 1000, 2)
-        self.add_current_costs(token_price)
+        self.add_current_costs(float(token_price))
 
         # update usage_history
         if "vision_tokens" in self.usage["usage_history"][str(today)]:
@@ -550,7 +550,7 @@ class UsageTracker:
         price = tts_prices[tts_models.index(tts_model)]
         today = date.today()
         tts_price = round(text_length * price / 1000, 2)
-        self.add_current_costs(tts_price)
+        self.add_current_costs(float(tts_price))
 
         if 'tts_characters' not in self.usage['usage_history'][str(today)]:
             self.usage['usage_history'][str(today)]['tts_characters'] = {}
@@ -603,15 +603,15 @@ class UsageTracker:
         """
         today = date.today()
         transcription_price = round(seconds * minute_price / 60, 2)
-        self.add_current_costs(transcription_price)
+        self.add_current_costs(float(transcription_price))
 
         # update usage_history
-        if str(today) in self.usage["usage_history"]["transcription_seconds"]:
+        if "transcription_seconds" in self.usage["usage_history"][str(today)]:
             # add requested seconds to existing date
-            self.usage["usage_history"]["transcription_seconds"][str(today)] += seconds
+            self.usage["usage_history"][str(today)]["transcription_seconds"] += seconds
         else:
             # create new entry for current date
-            self.usage["usage_history"]["transcription_seconds"][str(today)] = seconds
+            self.usage["usage_history"][str(today)]["transcription_seconds"] = seconds
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
@@ -638,6 +638,8 @@ class UsageTracker:
                 self.usage["current_cost"]["month"] = request_cost
             self.usage["current_cost"]["day"] = request_cost
             self.usage["current_cost"]["last_update"] = str(today)
+        with open(self.user_file, "w") as outfile:
+            json.dump(self.usage, outfile, indent=4)
 
     def get_current_transcription_duration(self):
         """Get minutes and seconds of audio transcribed for today and this month.
@@ -707,13 +709,14 @@ class UsageTracker:
         output_token_price = self.usage['telegram_config']['output_token_price']
         cached_token_price = self.usage['telegram_config']['cached_token_price']
 
-        input_token_cost = round(float(total_input_tokens) * input_tokens_price / 1000, 6)
-        output_token_cost = round(float(total_output_tokens) * output_token_price / 1000, 6)
-        cached_token_cost = round(float(total_cached_tokens) * cached_token_price / 1000, 6)      
+        non_cached_tokens = total_input_tokens - total_cached_tokens
+        non_cached_tokens_cost = round(float(non_cached_tokens) * input_tokens_price / 1000, 6)
+        output_tokens_cost = round(float(total_output_tokens) * output_token_price / 1000, 6)
+        cached_tokens_cost = round(float(total_cached_tokens) * cached_token_price / 1000, 6)      
 
-        tokens_cost = input_token_cost \
-                   + output_token_cost \
-                   + cached_token_cost
+        tokens_cost = non_cached_tokens_cost \
+                   + output_tokens_cost \
+                   + cached_tokens_cost
 
 
         image_prices=self.usage['telegram_config']['image_prices']
