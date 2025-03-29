@@ -22,7 +22,7 @@ import requests
 
 from usage_tracker import UsageTracker
 
-from gpt_all_models import GPT_3_MODELS, GPT_3_16K_MODELS, GPT_4_MODELS, GPT_4_32K_MODELS, GPT_4_VISION_MODELS, GPT_4_128K_MODELS, GPT_4O_MODELS, O_MODELS
+from gpt_all_models import GPT_ALL_MODELS, GPT_3_MODELS, GPT_3_16K_MODELS, GPT_4_MODELS, GPT_4_32K_MODELS, GPT_4_VISION_MODELS, GPT_4_128K_MODELS, GPT_4O_MODELS, O_MODELS
 
 #TogetherAI Models;Put your desired models from TogetherAI models here
 GPT_TOGETHERAI_MODELS = ("Qwen/Qwen2.5-Coder-32B-Instruct","meta-llama/Llama-3.3-70B-Instruct-Turbo")
