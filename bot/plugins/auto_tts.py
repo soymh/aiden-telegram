@@ -16,11 +16,12 @@ class AutoTextToSpeech(Plugin):
     def get_spec(self) -> [Dict]:
         return [{
             "name": "translate_text_to_speech",
-            "description": "Translate text to speech using OpenAI API",
+            "description": "Translate text to speech and give a voice interacting with the user."
+            "Call it wehenever the user asks or you think is appropriate to use this function.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "The text to translate to speech"},
+                    "text": {"type": "string", "description": "The text to convert to speech and then give to the user."},
                 },
                 "required": ["text"],
             },

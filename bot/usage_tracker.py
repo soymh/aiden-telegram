@@ -39,7 +39,7 @@ class UsageTracker:
         self.functions_available = self.are_functions_available(model=model) if self.are_functions_available else True
         self.max_tokens_default = self.default_max_tokens(model=model) if self.default_max_tokens else 1200
         self.user_id = user_id
-        self.chat_id = chat_id
+        self.chat_id = chat_id 
         self.logs_dir = logs_dir
         # path to usage file of given user
         self.user_file = f"{logs_dir}/{user_id}.json"
@@ -156,12 +156,25 @@ class UsageTracker:
         if os.path.isfile(self.user_file):
             with open(self.user_file, "r") as file:
                 self.usage = json.load(file)
+            if str(today) not in self.usage['usage_history']:
+                self.usage['usage_history'][str(today)] = {}
             if 'chat_tokens' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['chat_tokens'] = {}
+                self.usage['usage_history'][str(today)]['chat_tokens'] = {
+                    "input_token_count":int(),
+                    "output_token_count":int(),
+                    "cached_token_count":int()
+                }
+
+            if 'transcription_seconds' not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)]['transcription_seconds'] = 0
+            if 'number_images' not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)]['number_images'] = []
+            if 'tts_characters' not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)]['tts_characters'] = {}
             if 'vision_tokens' not in self.usage['usage_history'][str(today)]:
                 self.usage['usage_history'][str(today)]['vision_tokens'] = int()
-            if 'tts_characters' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['tts_characters'] = ""
+
+
         else:
             # ensure directory exists
             pathlib.Path(logs_dir).mkdir(exist_ok=True)
@@ -173,7 +186,12 @@ class UsageTracker:
                     "input_token_count":int(),
                     "output_token_count":int(),
                     "cached_token_count":int()
-                }, "transcription_seconds": int(), "number_images": [], "tts_characters": {}, "vision_tokens":int()}},
+                },
+                "transcription_seconds": int(),
+                "number_images": [],
+                "tts_characters": {},
+                "vision_tokens":int()}
+                },
                 "openai_config": self.openai_config,
                 "telegram_config": self.telegram_config,
                 "conversations": self.conversations,
@@ -402,16 +420,14 @@ class UsageTracker:
         self.add_current_costs(float(tokens_cost))
 
         # First, load current data from file.
-        # current_usage = {}
+        current_usage = {}
         
         if os.path.isfile(self.user_file):
             try:
                 with open(self.user_file, "r") as infile:
-                    self.usage = json.load(infile)
+                    current_usage = json.load(infile)
             except Exception as e:
                 logging.warning(f"Error reading usage file: {e}")
-
-        current_usage = self.usage
 
         # Make sure we have the expected structure.
         if "usage_history" not in current_usage:
@@ -652,23 +668,31 @@ class UsageTracker:
         """
         today = date.today()
         last_update = date.fromisoformat(self.usage["current_cost"]["last_update"])
-
+        # First, load current data from file.
+        current_usage = {}
+        
+        if os.path.isfile(self.user_file):
+            try:
+                with open(self.user_file, "r") as infile:
+                    current_usage = json.load(infile)
+            except Exception as e:
+                logging.warning(f"Error reading usage file: {e}")
         # add to all_time cost, initialize with calculation of total_cost if key doesn't exist
         self.usage["current_cost"]["all_time"] = \
-            self.usage["current_cost"].get("all_time", self.initialize_all_time_cost()) + request_cost
+            current_usage["current_cost"].get("all_time", self.initialize_all_time_cost()) + request_cost
         # add current cost, update new day
         if today == last_update:
-            self.usage["current_cost"]["day"] += request_cost
-            self.usage["current_cost"]["month"] += request_cost
+            current_usage["current_cost"]["day"] += request_cost
+            current_usage["current_cost"]["month"] += request_cost
         else:
             if today.month == last_update.month:
-                self.usage["current_cost"]["month"] += request_cost
+                current_usage["current_cost"]["month"] += request_cost
             else:
-                self.usage["current_cost"]["month"] = request_cost
-            self.usage["current_cost"]["day"] = request_cost
-            self.usage["current_cost"]["last_update"] = str(today)
+                current_usage["current_cost"]["month"] = request_cost
+            current_usage["current_cost"]["day"] = request_cost
+            current_usage["current_cost"]["last_update"] = str(today)
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile, indent=4)
+            json.dump(current_usage, outfile, indent=4)
 
     def get_current_transcription_duration(self):
         """Get minutes and seconds of audio transcribed for today and this month.
