@@ -16,10 +16,10 @@ def main():
     first_admin = os.environ.get('ADMIN_USER_IDS','0').split(',')[0]
     admin_tracker = UsageTracker(user_id=first_admin, username='admin',chat_id=first_admin ,default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
     users_directory = admin_tracker.logs_dir
-    allowed_user_ids_list = [
-        filename[:-5] for filename in os.listdir(users_directory)
-        if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
-    ]
+    # user_ids_list_list = [
+    #     filename[:-5] for filename in os.listdir(users_directory)
+    #     if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
+    # ]
 
     # Setup logging
     logging.basicConfig(
@@ -93,7 +93,7 @@ def main():
     # telegram_config = {
     #     'token': os.environ['TELEGRAM_BOT_TOKEN'],
     #     'admin_user_ids': os.environ.get('ADMIN_USER_IDS', '-'),
-    #     'allowed_user_ids': ','.join(allowed_user_ids_list) if allowed_user_ids_list!=[] else os.environ.get('ADMIN_USER_IDS', '-'),
+    #     'user_ids_list': ','.join(user_ids_list_list) if user_ids_list_list!=[] else os.environ.get('ADMIN_USER_IDS', '-'),
     #     'allow_group_users': os.environ.get('ALLOW_GROUP_USERS','false').lower() == 'true',
     #     'enable_quoting': os.environ.get('ENABLE_QUOTING', 'true').lower() == 'true',
     #     'enable_image_generation': os.environ.get('ENABLE_IMAGE_GENERATION', 'true').lower() == 'true',

@@ -172,7 +172,9 @@ class ImageGeneratorPlugin(Plugin):
                 'direct_result': {
                     'kind': 'document',
                     'format': 'path',
-                    'value': image_file_path
+                    'value': image_file_path,
+                    'costly': True,
+                    'image_size': size
                 }
             }
         except Exception as e:

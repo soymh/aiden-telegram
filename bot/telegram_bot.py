@@ -47,10 +47,10 @@ class ChatGPTTelegramBot:
         first_admin = os.environ.get('ADMIN_USER_IDS','0').split(',')[0]
         admin_tracker = UsageTracker(user_id=first_admin, username='admin', chat_id=first_admin, default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
         users_directory = admin_tracker.logs_dir
-        allowed_user_ids_list = [
-            filename[:-5] for filename in os.listdir(users_directory)
-            if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
-        ]
+        # user_ids_list = [
+        #     filename[:-5] for filename in os.listdir(users_directory)
+        #     if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
+        # ]
         self.user_id = int()
         self.username = ""
         self.chat_id = int()
@@ -86,7 +86,7 @@ class ChatGPTTelegramBot:
         BotCommand(
             command='moderate', description=localized_text('moderate_description', bot_language)
         )] + self.commands
-        self.disallowed_message = "Sorry...\n You are not allowed to use this bot."
+        self.disallowed_message = "Sorry...\n You are not allowed to perform this action."
         self.budget_limit_message = localized_text('budget_limit', bot_language)
         self.last_message = {}
         self.inline_queries_cache = {}
@@ -135,7 +135,7 @@ class ChatGPTTelegramBot:
         if not await is_allowed(self.config, update, context):
             logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
                             'is not allowed to request their usage statistics')
-            await self.send_disallowed_message(update, context)
+            await self.send_disallowed_markup(update, context)
             return
 
         logging.info(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
@@ -143,15 +143,15 @@ class ChatGPTTelegramBot:
 
         user_id = update.message.from_user.id
         if user_id not in self.usage:
-            self.usage[user_id] = UsageTracker(user_id, update.message.from_user.name)
+            self.usage[self.user_id] = UsageTracker(user_id, update.message.from_user.name)
 
-        tokens_today, tokens_month = self.usage[user_id].get_current_token_usage()
-        images_today, images_month = self.usage[user_id].get_current_image_count()
+        tokens_today, tokens_month = self.usage[self.user_id].get_current_token_usage()
+        images_today, images_month = self.usage[self.user_id].get_current_image_count()
         (transcribe_minutes_today, transcribe_seconds_today, transcribe_minutes_month,
-         transcribe_seconds_month) = self.usage[user_id].get_current_transcription_duration()
-        vision_today, vision_month = self.usage[user_id].get_current_vision_tokens()
-        characters_today, characters_month = self.usage[user_id].get_current_tts_usage()
-        current_cost = self.usage[user_id].get_current_cost()
+         transcribe_seconds_month) = self.usage[self.user_id].get_current_transcription_duration()
+        vision_today, vision_month = self.usage[self.user_id].get_current_vision_tokens()
+        characters_today, characters_month = self.usage[self.user_id].get_current_tts_usage()
+        current_cost = self.usage[self.user_id].get_current_cost()
 
         chat_id = update.effective_chat.id
         chat_messages, chat_token_length = self.openai.get_conversation_stats(self.user_id, self.username, chat_id, self.user_id, self.username)
@@ -241,7 +241,7 @@ class ChatGPTTelegramBot:
         if not await is_allowed(self.config, update, context):
             logging.warning(f'User {update.message.from_user.name}  (id: {update.message.from_user.id})'
                             ' is not allowed to resend the message')
-            await self.send_disallowed_message(update, context)
+            await self.send_disallowed_markup(update, context)
             return
 
         chat_id = update.effective_chat.id
@@ -271,7 +271,7 @@ class ChatGPTTelegramBot:
         if not await is_allowed(self.config, update, context):
             logging.warning(f'User {update.message.from_user.name} (id: {update.message.from_user.id}) '
                             'is not allowed to reset the conversation')
-            await self.send_disallowed_message(update, context)
+            await self.send_disallowed_markup(update, context)
             return
 
         logging.info(f'Resetting the conversation for user {update.message.from_user.name} '
@@ -345,11 +345,11 @@ class ChatGPTTelegramBot:
                         raise Exception(f"env variable IMAGE_RECEIVE_MODE has invalid value {self.config['image_receive_mode']}")
 
                 # Add image request to users usage tracker
-                user_id = update.message.from_user.id
-                self.usage[user_id].add_image_request(image_size, self.config['image_prices'])
+                # user_id = update.message.from_user.id
+                self.usage[self.user_id].add_image_request(image_size, self.config['image_prices'])
 
                 # Add guest chat request to guest usage tracker
-                if str(user_id) not in self.config['allowed_user_ids'].split(',') and 'guests' in self.usage:
+                if str(user_id) not in self.config['user_ids_list'].split(',') and 'guests' in self.usage:
                     self.usage["guests"].add_image_request(image_size, self.config['image_prices'])
 
             except Exception as e:
@@ -394,10 +394,10 @@ class ChatGPTTelegramBot:
                 )
                 speech_file.close()
                 # add image request to users usage tracker
-                user_id = update.message.from_user.id
-                self.usage[user_id].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
+                # user_id = update.message.from_user.id
+                self.usage[self.user_id].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
                 # add guest chat request to guest usage tracker
-                if str(user_id) not in self.config['allowed_user_ids'].split(',') and 'guests' in self.usage:
+                if str(user_id) not in self.config['user_ids_list'].split(',') and 'guests' in self.usage:
                     self.usage["guests"].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
 
             except Exception as e:
@@ -463,19 +463,19 @@ class ChatGPTTelegramBot:
                     os.remove(filename)
                 return
 
-            user_id = update.message.from_user.id
-            username =update.message.from_user.name
-            if user_id not in self.usage:
-                self.usage[user_id] = UsageTracker(user_id, username)
+            # user_id = update.message.from_user.id
+            # username =update.message.from_user.name
+            # if user_id not in self.usage:
+            #     self.usage[self.user_id] = UsageTracker(self.user_id, self.username)
 
             try:
                 transcript = await self.openai.transcribe(self.user_id, self.username, filename_mp3)
 
                 transcription_price = self.config['transcription_price']
-                self.usage[user_id].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
+                self.usage[self.user_id].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
 
-                allowed_user_ids = self.config['allowed_user_ids'].split(',')
-                if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
+                user_ids_list = self.config['user_ids_list'].split(',')
+                if str(user_id) not in user_ids_list and 'guests' in self.usage:
                     self.usage["guests"].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
 
                 # check if transcript starts with any of the prefixes
@@ -497,12 +497,12 @@ class ChatGPTTelegramBot:
                         )
                 else:
                     # Get the response of the transcript
-                    response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=transcript)
+                    response, input_tokens, output_tokens, cached_tokens  = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=transcript)
                     
-                    self.usage[user_id].add_chat_tokens(tokens=total_tokens)
+                    # self.usage[self.user_id].add_chat_tokens(input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens)
 
-                    if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
-                        self.usage["guests"].add_chat_tokens(total_tokens)
+                    if str(user_id) not in user_ids_list and 'guests' in self.usage:
+                        self.usage["guests"].add_chat_tokens(output_tokens=total_tokens)
 
                     # Split into chunks of 4096 characters (Telegram's message limit)
                     transcript_output = (
@@ -539,6 +539,8 @@ class ChatGPTTelegramBot:
         """
         Interpret image using vision model.
         """
+        await self.user_update(update,context)
+
         if not self.config['enable_vision'] or not await self.check_allowed_and_within_budget(update, context):
             return
 
@@ -598,9 +600,9 @@ class ChatGPTTelegramBot:
             
             
 
-            user_id = update.message.from_user.id
-            if user_id not in self.usage:
-                self.usage[user_id] = UsageTracker(user_id, update.message.from_user.name)
+            # user_id = update.message.from_user.id
+            # if user_id not in self.usage:
+            #     self.usage[user_id] = UsageTracker(user_id, update.message.from_user.name)
 
             if self.config['stream']:
 
@@ -719,16 +721,16 @@ class ChatGPTTelegramBot:
                         parse_mode=constants.ParseMode.MARKDOWN
                     )
             vision_token_price = self.config['vision_token_price']
-            self.usage[user_id].add_vision_tokens(total_tokens, vision_token_price)
+            self.usage[self.user_id].add_vision_tokens(total_tokens, vision_token_price)
 
-            allowed_user_ids = self.config['allowed_user_ids'].split(',')
-            if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
+            user_ids_list = self.config['user_ids_list'].split(',')
+            if str(user_id) not in user_ids_list and 'guests' in self.usage:
                 self.usage["guests"].add_vision_tokens(total_tokens, vision_token_price)
 
         await wrap_with_indicator(update, context, _execute, constants.ChatAction.TYPING)
 
     async def process_openai_response(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt, chat_id, role:str, super_access=False):
-        total_tokens = 0
+        input_tokens = output_tokens = cached_tokens = total_tokens = 0
         await self.user_update(update,context)
 
         try:
@@ -740,7 +742,7 @@ class ChatGPTTelegramBot:
                 )
 
                 stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
-                self.usage[user_id].add_chat_tokens(type="input",tokens=prompt)
+                # self.usage[self.user_id].add_chat_tokens(input_string=prompt)
                 i = 0
                 prev = ''
                 sent_message = None
@@ -750,9 +752,9 @@ class ChatGPTTelegramBot:
                 async for content, tokens in stream_response:
                     if is_direct_result(content):
                         direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
-                        direct_caption , direct_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
-                        add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_tokens)
-                        self.usage[user_id].add_chat_tokens(tokens=direct_tokens)
+                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
+                        # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
                         # logging.info(f"direct caption is : {direct_caption}")
                         total_tokens += direct_tokens
                         return await handle_direct_result(self.config, update, content , direct_caption)
@@ -826,16 +828,14 @@ class ChatGPTTelegramBot:
             # Handle non-streaming response
             else:
                 async def _reply():
-                    nonlocal total_tokens
-                    response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
-                    self.usage[user_id].add_chat_tokens(type="input",tokens=prompt)
-
+                    nonlocal input_tokens, output_tokens, cached_tokens
+                    response, input_tokens, output_tokens, cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
                     if is_direct_result(response):
                         direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
-                        direct_caption , direct_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
-                        self.usage[user_id].add_chat_tokens(tokens=direct_tokens)
+                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
                         # logging.info(f"direct caption is : {direct_caption} and direct token: {direct_tokens}")
-                        add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_tokens)
+                        add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
                         return await handle_direct_result(self.config, update, response , direct_caption)
 
                     # Split into chunks of 4096 characters (Telegram's message limit)
@@ -863,7 +863,7 @@ class ChatGPTTelegramBot:
 
                 await wrap_with_indicator(update, context, _reply, constants.ChatAction.TYPING)
 
-            add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, total_tokens)
+            add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, input_tokens, output_tokens, cached_tokens)
 
         except Exception as e:
             logging.exception(e)
@@ -1084,7 +1084,10 @@ class ChatGPTTelegramBot:
             return
 
         # If the user is awaiting channel ID input, do nothing here.
-        if update.message.from_user.id in self.awaiting_users or not is_allowed(self.config, update, context) :
+        if update.message.from_user.id in self.awaiting_users :
+            return
+        if not await is_allowed(self.config, update, context) :
+            await self.send_disallowed_markup(update,context)
             return
 
         if not await self.check_allowed_and_within_budget(update, context):
@@ -1195,7 +1198,7 @@ class ChatGPTTelegramBot:
         try:
             if callback_data.startswith(callback_data_suffix):
                 unique_id = callback_data.split(':')[1]
-                total_tokens = 0
+                input_tokens = output_tokens = cached_tokens = total_tokens = 0
 
                 # Retrieve the prompt from the cache
                 query = self.inline_queries_cache.get(unique_id)
@@ -1214,7 +1217,7 @@ class ChatGPTTelegramBot:
                 unavailable_message = localized_text("function_unavailable_in_inline_mode", bot_language)
                 if self.config['stream']:
                     stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=user_id, role="user", query=query)
-                    self.usage[user_id].add_chat_tokens(type="input",tokens=query)
+                    # self.usage[self.user_id].add_chat_tokens(input_string=query)
                     i = 0
                     prev = ''
                     backoff = 0
@@ -1275,15 +1278,15 @@ class ChatGPTTelegramBot:
 
                 else:
                     async def _send_inline_query_response():
-                        nonlocal total_tokens
+                        nonlocal input_tokens, output_tokens, cached_tokens
                         # Edit the current message to indicate that the answer is being processed
                         await context.bot.edit_message_text(inline_message_id=inline_message_id,
                                                             text=f'{query}\n\n_{answer_tr}:_\n{loading_tr}',
                                                             parse_mode=constants.ParseMode.MARKDOWN)
 
                         logging.info(f'Generating response for inline query by {name}')
-                        response, total_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=user_id, role=role, query=query)
-                        self.usage[user_id].add_chat_tokens(type="input",tokens=query)
+                        response, input_tokens, output_tokens, cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=user_id, role=role, query=query)
+                        # self.usage[self.user_id].add_chat_tokens(input_string=query)
 
                         if is_direct_result(response):
                             cleanup_intermediate_files(response)
@@ -1305,7 +1308,7 @@ class ChatGPTTelegramBot:
                     await wrap_with_indicator(update, context, _send_inline_query_response,
                                               constants.ChatAction.TYPING, is_inline=True)
 
-                add_chat_request_to_usage_tracker(self.usage, self.config, user_id, total_tokens)
+                add_chat_request_to_usage_tracker(self.usage, self.config, user_id, input_tokens, output_tokens, cached_tokens)
 
         except Exception as e:
             logging.error(f'Failed to respond to an inline query via button callback: {e}')
@@ -1329,7 +1332,7 @@ class ChatGPTTelegramBot:
         await self.user_update(update,context)
         if not await is_allowed(self.config, update, context, is_inline=is_inline):
             logging.warning(f'User {name} (id: {user_id}) is not allowed to use the bot')
-            await self.send_disallowed_message(update, context, is_inline)
+            await self.send_disallowed_markup(update, context, is_inline)
             return False
         if not is_within_budget(self.config, self.usage, update, is_inline=is_inline):
             logging.warning(f'User {name} (id: {user_id}) reached their usage limit')
@@ -1338,7 +1341,7 @@ class ChatGPTTelegramBot:
 
         return True
 
-    async def send_disallowed_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline=False):
+    async def send_disallowed_markup(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline=False):
         """
         Sends the disallowed message to the user along with a join request button.
         """
@@ -1363,7 +1366,17 @@ class ChatGPTTelegramBot:
             result_id = str(uuid.uuid4())
             inline_message = f"{self.disallowed_message}\n\nPress the button below to join."
             await self.send_inline_query_result(update, result_id, message_content=inline_message)
-
+    async def send_disallowed_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline=False):
+        """
+        Send a simple not allowed message
+        """
+        if await is_forbidden(self.config,update,context):
+            return
+        await update.effective_message.reply_text(
+                message_thread_id=get_thread_id(update),
+                text=self.disallowed_message,
+                disable_web_page_preview=True
+            )
     async def join_request_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Handles the callback when a user presses the join button.
@@ -1411,9 +1424,9 @@ class ChatGPTTelegramBot:
         user_id = int(user_id_str)
         
         if action == "admin_approve":
-            self.usage[user_id] = UsageTracker(user_id, user.username, user_id)
+            self.usage[self.user_id] = UsageTracker(user_id, user.username, user_id)
             self.awaiting_users.remove(user_id)
-            self.usage[user_id].update_telegram_config(True,'is_allowed',True)
+            self.usage[self.user_id].update_telegram_config(True,'is_allowed',True)
             await context.bot.send_message(
                 chat_id=user_id,
                 text="You have been approved to use the bot!\n"
@@ -1421,7 +1434,7 @@ class ChatGPTTelegramBot:
             response_text = f"User {user_id} has been approved."
         elif action == "admin_deny":
             self.awaiting_users.remove(user_id)
-            self.usage[user_id].update_telegram_config(True,'id_forbidden',True)
+            self.usage[self.user_id].update_telegram_config(True,'id_forbidden',True)
             await context.bot.send_message(
                 chat_id=user_id,
                 text="Sorry, you are not granted access to use the bot by the admin."
@@ -1452,7 +1465,7 @@ class ChatGPTTelegramBot:
         """
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
-    # Helper: returns a formatted table string with all users from self.logs_dir
+    # Helper: returns a table of all users.
     def get_all_users_table(self) -> str:
         """
         Returns a table (as a string) of all users read from self.logs_dir,
@@ -1469,18 +1482,14 @@ class ChatGPTTelegramBot:
                         data = json.load(f)
                     user_id = file_name[:-5]  # remove .json extension
                     username = data.get("username", "N/A")
-                    # We assume that in telegram_config, is_allowed exists.
                     allowed = data.get("telegram_config", {}).get("is_allowed", False)
                     rows.append(f"{user_id:<12} | {username:<20} | {str(allowed):<7}")
                 except Exception as e:
                     logging.info(f"Error reading file {file_name}: {e}")
                     continue
-        if rows:
-            return header + "\n".join(rows)
-        else:
-            return "No users found."
+        return header + "\n".join(rows) if rows else "No users found."
 
-    # Helper: permit/disallow a user by updating its JSON file
+    # Helper: permit/disallow a user by updating its JSON file.
     async def update_user_permission(self, update: Update, target_user_id: str, new_status: bool) -> bool:
         """
         Updates the permission status of the target user.
@@ -1506,25 +1515,21 @@ class ChatGPTTelegramBot:
             await update.message.reply_text("Failed to update user file.")
             return False
 
-    # Main command handler
+    # Main command handler.
     async def config_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Handle configuration commands for:
-        - get: /setconfig get <openai|telegram> <config_key>
-        - set: /setconfig set <openai|telegram> <config_key> <new_value>
-        - list: /setconfig list    (lists allowed users only)
-        - all: /setconfig all      (lists all users with permission status)
+        - get:    /setconfig get <openai|telegram> <config_key>
+        - set:    /setconfig set <openai|telegram> <config_key> <new_value>
+        - list:   /setconfig list    (lists allowed users only)
+        - all:    /setconfig all     (lists all users with permission status)
         - permit: /setconfig permit <user_id> <true|false>
+        - full:   /setconfig full <user_id>   (returns full config for that user)
         """
-        # Update the current user data
+        # Update current user data.
         await self.user_update(update, context)
         user = update.effective_user
         admin_check = is_admin(self.config, user.id)
-        # Only admins can run these commands
-        if not admin_check:
-            if await is_allowed(self.config, update, context):
-                await self.send_disallowed_message(update, context)
-            return
 
         # If no arguments, show usage instructions.
         if not context.args:
@@ -1534,7 +1539,8 @@ class ChatGPTTelegramBot:
                 "  To set:    /setconfig set <openai|telegram> <config_key> <new_value>\n"
                 "  To list allowed users: /setconfig list\n"
                 "  To list all users:     /setconfig all\n"
-                "  To permit/disallow a user: /setconfig permit <user_id> <true|false>"
+                "  To permit/disallow a user: /setconfig permit <user_id> <true|false>\n"
+                "  To get full config:    /setconfig full <user_id>"
             )
             return
 
@@ -1542,6 +1548,11 @@ class ChatGPTTelegramBot:
 
         # --- Branch: list allowed users ---
         if action == "list":
+            # Only admins can run these commands.
+            if not admin_check:
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             allowed_users = []
             for file_name in os.listdir(self.logs_dir):
                 if file_name.endswith(".json"):
@@ -1549,27 +1560,33 @@ class ChatGPTTelegramBot:
                     try:
                         with open(file_path, "r") as f:
                             data = json.load(f)
-                        # Check for allowed users in telegram_config
                         if data.get("telegram_config", {}).get("is_allowed", False):
                             allowed_users.append(f"{file_name[:-5]}: {data.get('username', 'N/A')}")
                     except Exception as e:
                         logging.info(f"Error while getting allowed users list: {e}")
                         continue
-            if allowed_users:
-                msg = "Allowed users:\n" + "\n".join(allowed_users)
-            else:
-                msg = "No allowed users found."
+            msg = "Allowed users:\n" + "\n".join(allowed_users) if allowed_users else "No allowed users found."
             await update.message.reply_text(msg)
             return
 
         # --- Branch: list all users ---
         if action == "all":
+            # Only admins can run these commands.
+            if not admin_check:
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             table = self.get_all_users_table()
             await update.message.reply_text(table)
             return
 
         # --- Branch: permit/disallow a user ---
         if action == "permit":
+            # Only admins can run these commands.
+            if not admin_check:
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             if len(context.args) != 3:
                 await update.message.reply_text("Usage: /setconfig permit <user_id> <true|false>")
                 return
@@ -1582,12 +1599,36 @@ class ChatGPTTelegramBot:
             await update_user_permission(self, update, target_user_id, new_status)
             return
 
-        # --- Branch: get and set configuration values ---
-        if action not in ("get", "set"):
-            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', 'all', or 'permit'.")
+        # --- Branch: get full configuration for a specified user (admin only) ---
+        if action == "full":
+            # Only admins can run these commands.
+            if not admin_check:
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
+            if len(context.args) != 2:
+                await update.message.reply_text("Usage: /setconfig full <user_id>")
+                return
+            target_user_id = context.args[1]
+            file_path = os.path.join(self.logs_dir, f"{target_user_id}.json")
+            if not os.path.isfile(file_path):
+                await update.message.reply_text("User file not found.")
+                return
+            try:
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+                full_config = json.dumps(data, indent=4)
+                await update.message.reply_text(f"Full config for user {target_user_id}:\n{full_config}")
+            except Exception as e:
+                logging.info(f"Error reading config for user {target_user_id}: {e}")
+                await update.message.reply_text("Error reading user config.")
             return
 
-        # For get and set, we need at least three arguments.
+        # --- Branch: get and set configuration values ---
+        if action not in ("get", "set"):
+            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', 'all', 'permit', or 'full'.")
+            return
+
         if len(context.args) < 3:
             await update.message.reply_text(
                 "Usage:\n"
@@ -1599,7 +1640,7 @@ class ChatGPTTelegramBot:
         config_type = context.args[1].lower()
         key = context.args[2]
 
-        # Ensure we have a configuration manager for the user.
+        # Ensure a configuration manager exists for the user.
         if user.id not in self.usage:
             await update.message.reply_text("Configuration manager for your user was not found.")
             return
@@ -1625,20 +1666,19 @@ class ChatGPTTelegramBot:
                 await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
         elif action == "get":
             if config_type == "openai":
-                done, current_value = self.usage[user.id].retrieve_config_value('openai',key,admin_check)
+                done, current_value = self.usage[user.id].retrieve_config_value('openai', key, admin_check)
                 if done and current_value is not None:
                     await update.message.reply_text(f"Current OpenAI config: {key} = {current_value}")
                 else:
                     await update.message.reply_text("Key not found in OpenAI config.")
             elif config_type == "telegram":
-                done, current_value = self.usage[user.id].retrieve_config_value('telegram',key,admin_check)
+                done, current_value = self.usage[user.id].retrieve_config_value('telegram', key, admin_check)
                 if done and current_value is not None:
                     await update.message.reply_text(f"Current Telegram config: {key} = {current_value}")
                 else:
                     await update.message.reply_text("Key not found in Telegram config.")
             else:
                 await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
-
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C

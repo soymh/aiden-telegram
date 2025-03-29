@@ -4,6 +4,9 @@ import json
 import os
 from datetime import date
 from dotenv import load_dotenv
+import logging
+
+from gpt_all_models import GPT_ALL_MODELS
 
 load_dotenv()
 
@@ -29,6 +32,8 @@ class UsageTracker:
         :param username: Telegram user name
         :param logs_dir: path to directory of usage logs, defaults to "usage_logs"
         """
+        today = date.today()
+
         self.are_functions_available = are_functions_available
         self.default_max_tokens = default_max_tokens
         self.functions_available = self.are_functions_available(model=model) if self.are_functions_available else True
@@ -38,10 +43,11 @@ class UsageTracker:
         self.logs_dir = logs_dir
         # path to usage file of given user
         self.user_file = f"{logs_dir}/{user_id}.json"
-        allowed_user_ids_list = [
+        user_ids_list = [
             filename[:-5] for filename in os.listdir(logs_dir)
             if os.path.isfile(os.path.join(logs_dir, filename)) and filename.lower().endswith('.json')
         ]
+        user_ids_list.append(str(self.user_id))
         self.openai_config = {
             # API Configuration
             'api_key': os.environ['OPENAI_API_KEY'],
@@ -98,8 +104,8 @@ class UsageTracker:
             
             # User Access Control
             'admin_user_id': os.environ.get('ADMIN_USER_IDS', '-'),
-            'allowed_user_ids': ','.join(allowed_user_ids_list) if allowed_user_ids_list != [] else os.environ.get('ADMIN_USER_IDS', '-'),
-            'is_admin': self.user_id in os.environ.get('ADMIN_USER_IDS', '-').split(','),
+            'user_ids_list': ','.join(user_ids_list) if user_ids_list != [] else os.environ.get('ADMIN_USER_IDS', '-'),
+            'is_admin': str(self.user_id) in os.environ.get('ADMIN_USER_IDS', '-').split(','),
             'is_allowed': False,
             'is_forbidden': False,
 
@@ -117,7 +123,7 @@ class UsageTracker:
             'enable_vision': os.environ.get('ENABLE_VISION', 'true').lower() == 'true',
             'enable_tts_generation': os.environ.get('ENABLE_TTS_GENERATION', 'true').lower() == 'true',
             'budget_period': os.environ.get('BUDGET_PERIOD', 'monthly').lower(),
-            'user_budgets': os.environ.get('USER_BUDGETS', os.environ.get('MONTHLY_USER_BUDGETS', '*')),
+            'user_budget': os.environ.get('USER_BUDGET', 0.5),
             'guest_budget': float(os.environ.get('GUEST_BUDGET', os.environ.get('MONTHLY_GUEST_BUDGET', '100.0'))),
             'input_token_price': float(os.environ.get('INPUT_TOKEN_PRICE', 0.00015)),
             'output_token_price': float(os.environ.get('OUTPUT_TOKEN_PRICE', 0.0006)),
@@ -150,10 +156,12 @@ class UsageTracker:
         if os.path.isfile(self.user_file):
             with open(self.user_file, "r") as file:
                 self.usage = json.load(file)
-            if 'vision_tokens' not in self.usage['usage_history']:
-                self.usage['usage_history']['vision_tokens'] = {}
-            if 'tts_characters' not in self.usage['usage_history']:
-                self.usage['usage_history']['tts_characters'] = {}
+            if 'chat_tokens' not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)]['chat_tokens'] = {}
+            if 'vision_tokens' not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)]['vision_tokens'] = int()
+            if 'tts_characters' not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)]['tts_characters'] = ""
         else:
             # ensure directory exists
             pathlib.Path(logs_dir).mkdir(exist_ok=True)
@@ -161,7 +169,11 @@ class UsageTracker:
             self.usage = {
                 "username": username,
                 "current_cost": {"day": 0.0, "month": 0.0, "all_time": 0.0, "last_update": str(date.today())},
-                "usage_history": {"chat_tokens": {}, "transcription_seconds": {}, "number_images": {}, "tts_characters": {}, "vision_tokens":{}},
+                "usage_history": {str(today):{"chat_tokens": {
+                    "input_token_count":int(),
+                    "output_token_count":int(),
+                    "cached_token_count":int()
+                }, "transcription_seconds": int(), "number_images": [], "tts_characters": {}, "vision_tokens":int()}},
                 "openai_config": self.openai_config,
                 "telegram_config": self.telegram_config,
                 "conversations": self.conversations,
@@ -173,7 +185,7 @@ class UsageTracker:
         self.openai_exclude = {'flux_base_url', 'vision_max_tokens', 'enable_vision_follow_up_questions', 'whisper_prompt', 'functions_max_consecutive_calls'}
 
         self.telegram_keys = {key for key in self.telegram_config.keys()}
-        self.tel_exclude = {'token', 'admin_user_id', 'allowed_user_ids', 'is_admin', 'is_allowed', 'is_forbidden', 'budget_period', 'user_budgets', 'guest_budget', 'token_price', 'image_prices', 'transcription_price', 'vision_token_price', 'tts_prices', 'proxy'}
+        self.tel_exclude = {'token', 'admin_user_id', 'user_ids_list', 'is_admin', 'is_allowed', 'is_forbidden', 'budget_period', 'user_budgets', 'guest_budget', 'token_price', 'image_prices', 'transcription_price', 'vision_token_price', 'tts_prices', 'proxy'}
                             
 
     def save_state(self):
@@ -363,88 +375,63 @@ class UsageTracker:
         else:
             return None
 
-    def __count_tokens(self, messages) -> int:
-        """
-        Counts the number of tokens required to send the given messages.
-        :param messages: the messages to send
-        :return: the number of tokens required
-        """
-        model = self.config['model']
-        try:
-            encoding = tiktoken.encoding_for_model(model)
-        except KeyError:
-            encoding = tiktoken.get_encoding("o200k_base")
-
-        if model in GPT_ALL_MODELS:
-            tokens_per_message = 3
-            tokens_per_name = 1
-        else:
-            raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}.""")
-        num_tokens = 0
-        for message in messages:
-            num_tokens += tokens_per_message
-            for key, value in message.items():
-                if key == 'content':
-                    if isinstance(value, str):
-                        num_tokens += len(encoding.encode(value))
-                    else:
-                        for message1 in value:
-                            if message1['type'] == 'image_url':
-                                image = decode_image(message1['image_url']['url'])
-                                num_tokens += self.__count_tokens_vision(image)
-                            else:
-                                num_tokens += len(encoding.encode(message1['text']))
-                else:
-                    num_tokens += len(encoding.encode(value))
-                    if key == "name":
-                        num_tokens += tokens_per_name
-        num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
-        return num_tokens
-
-    def add_chat_tokens(self, tokens, type="output"):
+    def add_chat_tokens(self, input_tokens, output_tokens, cached_tokens):
         """
         Atomically updates the user's usage file by reading its current contents,
         merging in the new token usage, and writing the result back.
         This prevents overwriting previously stored data.
         """
+        non_cached_tokens = int(input_tokens) - int(cached_tokens)
+
         input_tokens_price = self.usage['telegram_config']['input_token_price']
         output_token_price = self.usage['telegram_config']['output_token_price']
         cached_token_price = self.usage['telegram_config']['cached_token_price']
+        
         today = date.today()
-        input_token_cost = 0
-        output_token_cost = 0
-        cached_token_cost = 0
+        today_str = str(today)
+      
+        non_cached_tokens = round(float(non_cached_tokens) * input_tokens_price / 1000, 6)
+        output_token_cost = round(float(output_tokens) * output_token_price / 1000, 6)
+        cached_token_cost = round(float(cached_tokens) * cached_token_price / 1000, 6)   
 
-        if type=="input":
-            tokens = self.__count_tokens({"role": "user","content": tokens})
-            input_token_cost = round(float(tokens) * input_tokens_price / 1000, 6)
-            cached_token_cost = self.__count_tokens(self.usage['conversations'])
-        elif type=="output":
-            output_token_cost = round(float(tokens) * output_token_price / 1000, 6)
-        token_cost = input_token_cost + output_token_cost + cached_token_cost
-        self.add_current_costs(token_cost)
+
+        tokens_cost = non_cached_tokens \
+                   + output_token_cost \
+                   + cached_token_cost
+
+        self.add_current_costs(tokens_cost)
 
         # First, load current data from file.
-        current_usage = {}
+        # current_usage = {}
+        
         if os.path.isfile(self.user_file):
             try:
                 with open(self.user_file, "r") as infile:
-                    current_usage = json.load(infile)
+                    self.usage = json.load(infile)
             except Exception as e:
                 logging.warning(f"Error reading usage file: {e}")
+
+        current_usage = self.usage
 
         # Make sure we have the expected structure.
         if "usage_history" not in current_usage:
             current_usage["usage_history"] = {}
-        if "chat_tokens" not in current_usage["usage_history"]:
-            current_usage["usage_history"]["chat_tokens"] = {}
+        if today_str not in current_usage["usage_history"]:
+            current_usage["usage_history"][today_str] = {}
+        if "chat_tokens" not in current_usage["usage_history"][today_str]:
+            current_usage["usage_history"][today_str]["chat_tokens"] = {}
 
-        # Update today's token count.
-        today_str = str(today)
-        if today_str in current_usage["usage_history"]["chat_tokens"]:
-            current_usage["usage_history"]["chat_tokens"][today_str] += tokens
+        for key, value in {"input_token_count": input_tokens, "output_token_count": output_tokens, "cached_token_count": cached_tokens}.items():
+
+            if "input_token_count" in current_usage["usage_history"][today_str]["chat_tokens"]:
+                current_usage["usage_history"][today_str]["chat_tokens"][key] += int(value)
+            else:
+                current_usage["usage_history"][today_str]["chat_tokens"][key] = int(value)
+
+        if "usage_times" in current_usage["usage_history"][today_str]["chat_tokens"]:
+            current_usage["usage_history"][today_str]["chat_tokens"]["usage_times"] += 1
         else:
-            current_usage["usage_history"]["chat_tokens"][today_str] = tokens
+            current_usage["usage_history"][today_str]["chat_tokens"]["usage_times"] = 1
 
         # Write back the merged data to the file atomically.
         try:
@@ -459,15 +446,15 @@ class UsageTracker:
         :return: total number of tokens used per day and per month
         """
         today = date.today()
-        if str(today) in self.usage["usage_history"]["chat_tokens"]:
-            usage_day = self.usage["usage_history"]["chat_tokens"][str(today)]
+        if "chat_tokens" in self.usage["usage_history"]:
+            usage_day = self.usage["usage_history"][str(today)]["chat_tokens"]
         else:
             usage_day = 0
         month = str(today)[:7]  # year-month as string
         usage_month = 0
-        for today, tokens in self.usage["usage_history"]["chat_tokens"].items():
+        for today, data in self.usage["usage_history"].items():
             if today.startswith(month):
-                usage_month += tokens
+                usage_month += data['chat_tokens']
         return usage_day, usage_month
 
     # image usage functions:
@@ -486,13 +473,13 @@ class UsageTracker:
         self.add_current_costs(image_cost)
 
         # update usage_history
-        if str(today) in self.usage["usage_history"]["number_images"]:
+        if "number_images" in self.usage["usage_history"][str(today)]:
             # add token usage to existing date
-            self.usage["usage_history"]["number_images"][str(today)][requested_size] += 1
+            self.usage["usage_history"][str(today)]["number_images"][requested_size] += 1
         else:
             # create new entry for current date
-            self.usage["usage_history"]["number_images"][str(today)] = [0, 0, 0]
-            self.usage["usage_history"]["number_images"][str(today)][requested_size] += 1
+            self.usage["usage_history"][str(today)]["number_images"] = [0, 0, 0]
+            self.usage["usage_history"][str(today)]["number_images"][requested_size] += 1
 
         # write updated image number to user file
         with open(self.user_file, "w") as outfile:
@@ -510,9 +497,9 @@ class UsageTracker:
             usage_day = 0
         month = str(today)[:7]  # year-month as string
         usage_month = 0
-        for today, images in self.usage["usage_history"]["number_images"].items():
+        for today, data in self.usage["usage_history"].items():
             if today.startswith(month):
-                usage_month += sum(images)
+                usage_month += sum(data['number_images'])
         return usage_day, usage_month
 
 
@@ -528,12 +515,12 @@ class UsageTracker:
         self.add_current_costs(token_price)
 
         # update usage_history
-        if str(today) in self.usage["usage_history"]["vision_tokens"]:
+        if "vision_tokens" in self.usage["usage_history"][str(today)]:
             # add requested seconds to existing date
-            self.usage["usage_history"]["vision_tokens"][str(today)] += tokens
+            self.usage["usage_history"][str(today)]["vision_tokens"] += tokens
         else:
             # create new entry for current date
-            self.usage["usage_history"]["vision_tokens"][str(today)] = tokens
+            self.usage["usage_history"][str(today)]["vision_tokens"] = tokens
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
@@ -545,15 +532,15 @@ class UsageTracker:
         :return: total amount of vision tokens per day and per month
         """
         today = date.today()
-        if str(today) in self.usage["usage_history"]["vision_tokens"]:
-            tokens_day = self.usage["usage_history"]["vision_tokens"][str(today)]
+        if "vision_tokens" in self.usage["usage_history"][str(today)]:
+            tokens_day = self.usage["usage_history"][str(today)]["vision_tokens"]
         else:
             tokens_day = 0
         month = str(today)[:7]  # year-month as string
         tokens_month = 0
-        for today, tokens in self.usage["usage_history"]["vision_tokens"].items():
+        for today, data in self.usage["usage_history"].items():
             if today.startswith(month):
-                tokens_month += tokens
+                tokens_month += data["vision_tokens"]
         return tokens_day, tokens_month
 
     # tts usage functions:
@@ -565,19 +552,19 @@ class UsageTracker:
         tts_price = round(text_length * price / 1000, 2)
         self.add_current_costs(tts_price)
 
-        if 'tts_characters' not in self.usage['usage_history']:
-            self.usage['usage_history']['tts_characters'] = {}
+        if 'tts_characters' not in self.usage['usage_history'][str(today)]:
+            self.usage['usage_history'][str(today)]['tts_characters'] = {}
         
-        if tts_model not in self.usage['usage_history']['tts_characters']:
-            self.usage['usage_history']['tts_characters'][tts_model] = {}
+        if tts_model not in self.usage['usage_history'][str(today)]['tts_characters']:
+            self.usage['usage_history'][str(today)]['tts_characters'][tts_model] = {}
 
         # update usage_history
-        if str(today) in self.usage["usage_history"]["tts_characters"][tts_model]:
+        if tts_model in self.usage["usage_history"][str(today)]["tts_characters"]:
             # add requested text length to existing date
-            self.usage["usage_history"]["tts_characters"][tts_model][str(today)] += text_length
+            self.usage["usage_history"][str(today)]["tts_characters"][tts_model] += text_length
         else:
             # create new entry for current date
-            self.usage["usage_history"]["tts_characters"][tts_model][str(today)] = text_length
+            self.usage["usage_history"][str(today)]["tts_characters"][tts_model] = text_length
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
@@ -593,15 +580,15 @@ class UsageTracker:
         today = date.today()
         characters_day = 0
         for tts_model in tts_models:
-            if tts_model in self.usage["usage_history"]["tts_characters"] and \
-                str(today) in self.usage["usage_history"]["tts_characters"][tts_model]:
-                characters_day += self.usage["usage_history"]["tts_characters"][tts_model][str(today)]
+            if tts_model in self.usage["usage_history"][str(today)]["tts_characters"] and \
+                tts_model in self.usage["usage_history"][str(today)]["tts_characters"]:
+                characters_day += self.usage["usage_history"][str(today)]["tts_characters"][tts_model]
 
         month = str(today)[:7]  # year-month as string
         characters_month = 0
         for tts_model in tts_models:
-            if tts_model in self.usage["usage_history"]["tts_characters"]: 
-                for today, characters in self.usage["usage_history"]["tts_characters"][tts_model].items():
+            if tts_model in self.usage["usage_history"][str(today)]["tts_characters"]: 
+                for today, data in self.usage["usage_history"].items():
                     if today.startswith(month):
                         characters_month += characters
         return int(characters_day), int(characters_month)
@@ -692,7 +679,7 @@ class UsageTracker:
         cost_all_time = self.usage["current_cost"].get("all_time", self.initialize_all_time_cost())
         return {"cost_today": cost_day, "cost_month": cost_month, "cost_all_time": cost_all_time}
 
-    def initialize_all_time_cost(self, tokens_price=0.002, image_prices="0.016,0.018,0.02", minute_price=0.006, vision_token_price=0.01, tts_prices='0.015,0.030'):
+    def initialize_all_time_cost(self, minute_price=0.006):
         """Get total USD amount of all requests in history
         
         :param tokens_price: price per 1000 tokens, defaults to 0.002
@@ -703,22 +690,54 @@ class UsageTracker:
         :param tts_prices: price per 1K characters tts per model ['tts-1', 'tts-1-hd'], defaults to [0.015, 0.030]
         :return: total cost of all requests
         """
-        total_tokens = sum(self.usage['usage_history']['chat_tokens'].values())
-        token_cost = round(total_tokens * tokens_price / 1000, 6)
+        usage_history = self.usage['usage_history']
 
-        total_images = [sum(values) for values in zip(*self.usage['usage_history']['number_images'].values())]
-        image_prices_list = [float(x) for x in image_prices.split(',')]
-        image_cost = sum([count * price for count, price in zip(total_images, image_prices_list)])
+        total_input_tokens = sum(
+            day_data['chat_tokens']['input_token_count'] for day_data in usage_history.values()
+        )
+        total_output_tokens = sum(
+            day_data['chat_tokens']['output_token_count'] for day_data in usage_history.values()
+        )
+        total_cached_tokens = sum(
+            day_data['chat_tokens']['cached_token_count'] for day_data in usage_history.values()
+        )
 
-        total_transcription_seconds = sum(self.usage['usage_history']['transcription_seconds'].values())
+
+        input_tokens_price = self.usage['telegram_config']['input_token_price']
+        output_token_price = self.usage['telegram_config']['output_token_price']
+        cached_token_price = self.usage['telegram_config']['cached_token_price']
+
+        input_token_cost = round(float(total_input_tokens) * input_tokens_price / 1000, 6)
+        output_token_cost = round(float(total_output_tokens) * output_token_price / 1000, 6)
+        cached_token_cost = round(float(total_cached_tokens) * cached_token_price / 1000, 6)      
+
+        tokens_cost = input_token_cost \
+                   + output_token_cost \
+                   + cached_token_cost
+
+
+        image_prices=self.usage['telegram_config']['image_prices']
+        total_images = [
+            sum(values) for values in zip(
+                *[day_data['number_images'] for day_data in usage_history.values()]
+            )
+        ]
+        image_cost = sum([count * price for count, price in zip(total_images, image_prices)])
+
+        total_transcription_seconds = sum(
+            day_data['transcription_seconds'] for day_data in usage_history.values()
+        )
         transcription_cost = round(total_transcription_seconds * minute_price / 60, 2)
 
-        total_vision_tokens = sum(self.usage['usage_history']['vision_tokens'].values())
+        vision_token_price = self.usage['telegram_config']['vision_token_price']
+        total_vision_tokens = sum(
+            day_data['vision_tokens'] for day_data in usage_history.values()
+        )
         vision_cost = round(total_vision_tokens * vision_token_price / 1000, 2)
 
-        total_characters = [sum(tts_model.values()) for tts_model in self.usage['usage_history']['tts_characters'].values()]
-        tts_prices_list = [float(x) for x in tts_prices.split(',')]
-        tts_cost = round(sum([count * price / 1000 for count, price in zip(total_characters, tts_prices_list)]), 2)
+        total_characters = [sum((tts_model.values()) for tts_model in day_data['tts_characters'].values()) for day_data in usage_history.values()]
+        tts_prices = self.usage['telegram_config']['tts_prices']
+        tts_cost = round(sum([count * price / 1000 for count, price in zip(total_characters, tts_prices)]), 2)
 
-        all_time_cost = token_cost + transcription_cost + image_cost + vision_cost + tts_cost
+        all_time_cost = tokens_cost + transcription_cost + image_cost + vision_cost + tts_cost
         return all_time_cost

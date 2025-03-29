@@ -183,24 +183,20 @@ def get_user_budget(config, user_id) -> float | None:
     """
 
     # no budget restrictions for admins and '*'-budget lists
-    if is_admin(config, user_id) or config['user_budgets'] == '*':
+    if is_admin(config, user_id) or config['user_budget'] == '*':
         return float('inf')
 
-    user_budgets = config['user_budgets'].split(',')
-    if config['allowed_user_ids'] == '*':
+    user_budget = config['user_budget']
+    if config['user_ids_list'] == '*':
         # same budget for all users, use value in first position of budget list
-        if len(user_budgets) > 1:
+        if len(user_budget) > 1:
             logging.warning('multiple values for budgets set with unrestricted user list '
                             'only the first value is used as budget for everyone.')
-        return float(user_budgets[0])
+        return float(user_budget[0])
 
-    allowed_user_ids = config['allowed_user_ids'].split(',')
-    if str(user_id) in allowed_user_ids:
-        user_index = allowed_user_ids.index(str(user_id))
-        if len(user_budgets) <= user_index:
-            logging.warning(f'No budget set for user id: {user_id}. Budget list shorter than user list.')
-            return 0.0
-        return float(user_budgets[user_index])
+    user_ids_list = config['user_ids_list'].split(',')
+    if str(user_id) in user_ids_list:
+        return float(user_budget)
     return None
 
 
@@ -257,7 +253,7 @@ def is_within_budget(config, usage, update: Update, is_inline=False) -> bool:
     return remaining_budget > 0
 
 
-def add_chat_request_to_usage_tracker(usage, config, user_id, used_tokens):
+def add_chat_request_to_usage_tracker(usage, config, user_id, input_tokens, output_tokens, cached_tokens ):
     """
     Add chat request to usage tracker
     :param usage: The usage tracker object
@@ -266,15 +262,18 @@ def add_chat_request_to_usage_tracker(usage, config, user_id, used_tokens):
     :param used_tokens: The number of tokens used
     """
     try:
-        if int(used_tokens) == 0:
-            logging.warning('No tokens used. Not adding chat request to usage tracker.')
-            return
+        tokens_list = ["input_tokens", "output_tokens", "cached_tokens"]
+        i = 0
+        for tokens in [input_tokens, output_tokens, cached_tokens]:
+            if int(tokens) == 0:
+                logging.warning(f'No {tokens_list[i]} used. Not adding to usage tracker.')
+            i += 1
         # add chat request to users usage tracker
-        usage[user_id].add_chat_tokens(used_tokens)
+        usage[user_id].add_chat_tokens(input_tokens, output_tokens, cached_tokens)
         # add guest chat request to guest usage tracker
-        allowed_user_ids = config['allowed_user_ids'].split(',')
-        if str(user_id) not in allowed_user_ids and 'guests' in usage:
-            usage["guests"].add_chat_tokens(used_tokens)
+        user_ids_list = config['user_ids_list'].split(',')
+        if str(user_id) not in user_ids_list and 'guests' in usage:
+            usage["guests"].add_chat_tokens(input_tokens, output_tokens, cached_tokens)
     except Exception as e:
         logging.warning(f'Failed to add tokens to usage_logs: {str(e)}')
         pass
@@ -319,7 +318,7 @@ async def handle_direct_result(config, update: Update, response: any,direct_capt
     kind = result['kind']
     format = result['format']
     value = result['value']
-    costly = result['costly']
+    costly = result.get('costly', None)
 
     user = update.effective_user
     user_id = user.id
@@ -334,7 +333,7 @@ async def handle_direct_result(config, update: Update, response: any,direct_capt
     }
 
     if kind == 'photo':
-        image_size = result['image_size']
+        image_size = result.get('image_size', None)
         if format == 'url':
             await update.effective_message.reply_photo(**common_args, photo=value)
         elif format == 'path':
