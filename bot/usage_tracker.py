@@ -440,23 +440,52 @@ class UsageTracker:
         except Exception as e:
             logging.warning(f"Failed to write tokens to usage file: {e}")
 
+    # def get_current_token_usage(self):
+    #     """Get token amounts used for today and this month
+
+    #     :return: total number of tokens used per day and per month
+    #     """
+    #     today = date.today()
+    #     if "chat_tokens" in self.usage["usage_history"]:
+    #         usage_day = self.usage["usage_history"][str(today)]["chat_tokens"]
+    #     else:
+    #         usage_day = 0
+    #     month = str(today)[:7]  # year-month as string
+    #     usage_month = {}
+    #     for today, data in self.usage["usage_history"].items():
+    #         if today.startswith(month):
+    #             usage_month += data['chat_tokens']
+    #     return usage_day, usage_month
+
     def get_current_token_usage(self):
         """Get token amounts used for today and this month
 
         :return: total number of tokens used per day and per month
         """
         today = date.today()
-        if "chat_tokens" in self.usage["usage_history"]:
-            usage_day = self.usage["usage_history"][str(today)]["chat_tokens"]
-        else:
-            usage_day = 0
+        today_str = str(today)
+        
+        # Initialize variables
+        usage_day = {}
+        usage_month = {
+            "input_token_count": 0,
+            "output_token_count": 0,
+            "cached_token_count": 0,
+            "usage_times": 0
+        }
+        
+        # Check if today's data exists
+        if today_str in self.usage["usage_history"] and "chat_tokens" in self.usage["usage_history"][today_str]:
+            usage_day = self.usage["usage_history"][today_str]["chat_tokens"]
+        
+        # Calculate month's usage
         month = str(today)[:7]  # year-month as string
-        usage_month = 0
-        for today, data in self.usage["usage_history"].items():
-            if today.startswith(month):
-                usage_month += data['chat_tokens']
+        for day, data in self.usage["usage_history"].items():
+            if day.startswith(month) and "chat_tokens" in data:
+                for key, value in data['chat_tokens'].items():
+                    usage_month[key] += value
+        
         return usage_day, usage_month
-
     # image usage functions:
 
     def add_image_request(self, image_size, image_prices="0.016,0.018,0.04"):
@@ -491,8 +520,8 @@ class UsageTracker:
         :return: total number of images requested per day and per month
         """
         today = date.today()
-        if str(today) in self.usage["usage_history"]["number_images"]:
-            usage_day = sum(self.usage["usage_history"]["number_images"][str(today)])
+        if "number_images" in self.usage["usage_history"][str(today)]:
+            usage_day = sum(self.usage["usage_history"][str(today)]["number_images"])
         else:
             usage_day = 0
         month = str(today)[:7]  # year-month as string
@@ -647,15 +676,15 @@ class UsageTracker:
         :return: total amount of time transcribed per day and per month (4 values)
         """
         today = date.today()
-        if str(today) in self.usage["usage_history"]["transcription_seconds"]:
-            seconds_day = self.usage["usage_history"]["transcription_seconds"][str(today)]
+        if "transcription_seconds" in self.usage["usage_history"][str(today)]:
+            seconds_day = self.usage["usage_history"][str(today)]["transcription_seconds"]
         else:
             seconds_day = 0
         month = str(today)[:7]  # year-month as string
         seconds_month = 0
-        for today, seconds in self.usage["usage_history"]["transcription_seconds"].items():
+        for today, day_data in self.usage["usage_history"].items():
             if today.startswith(month):
-                seconds_month += seconds
+                seconds_month += day_data["transcription_seconds"]
         minutes_day, seconds_day = divmod(seconds_day, 60)
         minutes_month, seconds_month = divmod(seconds_month, 60)
         return int(minutes_day), round(seconds_day, 2), int(minutes_month), round(seconds_month, 2)

@@ -152,7 +152,7 @@ class ChatGPTTelegramBot:
         current_cost = self.usage[self.user_id].get_current_cost()
 
         chat_id = update.effective_chat.id
-        chat_messages, chat_token_length = self.openai.get_conversation_stats(self.user_id, self.username, chat_id, self.user_id, self.username)
+        chat_messages, chat_token_length = self.openai.get_conversation_stats(self.user_id, self.username, chat_id)
         remaining_budget = get_remaining_budget(self.config, self.usage, update)
         bot_language = self.config['bot_language']
         
@@ -496,6 +496,13 @@ class ChatGPTTelegramBot:
                 else:
                     # Get the response of the transcript
                     response, input_tokens, output_tokens, cached_tokens  = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=transcript)
+                    if is_direct_result(response):
+                        direct_caption_prompt = "Since the function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user."
+                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
+                        # logging.info(f"direct caption is : {direct_caption} and direct token: {direct_tokens}")
+                        add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
+                        return await handle_direct_result(self.config, update, response , direct_caption)
                     
                     # self.usage[self.user_id].add_chat_tokens(input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens)
 
