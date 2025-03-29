@@ -47,7 +47,8 @@
         "answer_with_chatgpt":"Answer with ChatGPT",
         "ask_chatgpt":"Ask ChatGPT",
         "loading":"Loading...",
-        "function_unavailable_in_inline_mode": "This function is unavailable in inline mode"
+        "function_unavailable_in_inline_mode": "This function is unavailable in inline mode",
+        "setconfig_description": "Modify the configs if you have access to."
     },
     "ar": {
         "help_description":"عرض رسالة المساعدة",
@@ -97,7 +98,8 @@
         "answer_with_chatgpt":"الإجابة بواسطة ChatGPT",
         "ask_chatgpt":"سؤال ChatGPT",
         "loading":"قيد التحميل...",
-        "function_unavailable_in_inline_mode": "هذه الوظيفة غير متوفرة في الوضع المضمن"
+        "function_unavailable_in_inline_mode": "هذه الوظيفة غير متوفرة في الوضع المضمن",
+        "setconfig_description": "قم بتعديل الإعدادات إذا كان لديك حق الوصول إليها."
     },
     "de": {
         "help_description":"Zeige die Hilfenachricht",
@@ -147,7 +149,8 @@
         "answer_with_chatgpt":"Antworte mit ChatGPT",
         "ask_chatgpt":"Frage ChatGPT",
         "loading":"Lade...",
-        "function_unavailable_in_inline_mode": "Diese Funktion ist im Inline-Modus nicht verfügbar"
+        "function_unavailable_in_inline_mode": "Diese Funktion ist im Inline-Modus nicht verfügbar",
+        "setconfig_description": "Ändern Sie die Konfigurationen, wenn Sie Zugriff darauf haben."
     },
     "es": {
         "help_description":"Muestra el mensaje de ayuda",
@@ -197,7 +200,8 @@
         "answer_with_chatgpt":"Responder con ChatGPT",
         "ask_chatgpt":"Preguntar a ChatGPT",
         "loading":"Cargando...",
-        "function_unavailable_in_inline_mode": "Esta función no está disponible en el modo inline"
+        "function_unavailable_in_inline_mode": "Esta función no está disponible en el modo inline",
+        "setconfig_description": "Modifica las configuraciones si tienes acceso a ellas."
     },
     "fa": {
         "help_description":"نمایش پیغام راهنما",
@@ -247,7 +251,8 @@
         "answer_with_chatgpt":"با ChatGPT پاسخ دهید",
         "ask_chatgpt":"از ChatGPT بپرسید",
         "loading":"در حال بارگذاری...",
-        "function_unavailable_in_inline_mode": "این عملکرد در حالت آنلاین در دسترس نیست"
+        "function_unavailable_in_inline_mode": "این عملکرد در حالت آنلاین در دسترس نیست",
+        "setconfig_description": "تنظیمات را در صورت دسترسی تغییر دهید."
     },
     "fi": {
         "help_description":"Näytä ohjeet",
@@ -297,7 +302,8 @@
         "answer_with_chatgpt":"Vastaa ChatGPT:n avulla",
         "ask_chatgpt":"Kysy ChatGPT:ltä",
         "loading":"Lataa...",
-        "function_unavailable_in_inline_mode": "Tämä toiminto ei ole käytettävissä sisäisessä tilassa"
+        "function_unavailable_in_inline_mode": "Tämä toiminto ei ole käytettävissä sisäisessä tilassa",
+        "setconfig_description": "Muokkaa asetuksia, jos sinulla on pääsy niihin."
     },
     "he": {
         "help_description": "הצג הודעת עזרה",
@@ -347,7 +353,8 @@
         "answer_with_chatgpt": "ענה באמצעות ChatGPT",
         "ask_chatgpt": "שאל את ChatGPT",
         "loading": "טוען...",
-        "function_unavailable_in_inline_mode": "הפונקציה לא זמינה במצב inline"
+        "function_unavailable_in_inline_mode": "הפונקציה לא זמינה במצב inline",
+        "setconfig_description": "Modify the configs if you have access to."
     },
     "id": {
         "help_description": "Menampilkan pesan bantuan",
@@ -397,7 +404,8 @@
         "answer_with_chatgpt": "Jawaban dengan ChatGPT",
         "ask_chatgpt": "Tanya ChatGPT",
         "loading": "Sedang memuat...",
-        "function_unavailable_in_inline_mode": "Fungsi ini tidak tersedia dalam mode inline"
+        "function_unavailable_in_inline_mode": "Fungsi ini tidak tersedia dalam mode inline",
+        "setconfig_description": "Ubah konfigurasi jika Anda memiliki akses."
     },
     "it": {
         "help_description":"Mostra il messaggio di aiuto",
@@ -447,7 +455,8 @@
         "answer_with_chatgpt":"Rispondi con ChatGPT",
         "ask_chatgpt":"Chiedi a ChatGPT",
         "loading":"Carico...",
-        "function_unavailable_in_inline_mode": "Questa funzione non è disponibile in modalità inline"
+        "function_unavailable_in_inline_mode": "Questa funzione non è disponibile in modalità inline",
+        "setconfig_description": "Modifica le configurazioni se hai accesso."
     },
     "ms": {
         "help_description":"Lihat Mesej Bantuan",
@@ -497,7 +506,8 @@
         "answer_with_chatgpt":"Jawab dengan ChatGPT",
         "ask_chatgpt":"Tanya ChatGPT",
         "loading":"Memuatkan...",
-        "function_unavailable_in_inline_mode": "Fungsi ini tidak tersedia dalam mod sebaris"
+        "function_unavailable_in_inline_mode": "Fungsi ini tidak tersedia dalam mod sebaris",
+        "setconfig_description": "Ubah konfigurasi jika anda mempunyai akses."
     },
     "nl": {
         "help_description":"Toon uitleg",
@@ -547,7 +557,8 @@
         "answer_with_chatgpt":"Antwoord met ChatGPT",
         "ask_chatgpt":"Vraag ChatGPT",
         "loading":"Laden...",
-        "function_unavailable_in_inline_mode": "Deze functie is niet beschikbaar in de inline modus"
+        "function_unavailable_in_inline_mode": "Deze functie is niet beschikbaar in de inline modus",
+        "setconfig_description": "Wijzig de configuraties als je toegang hebt."
     },
     "pl": {
         "help_description": "Pokaż wiadomości pomocnicze",
@@ -597,7 +608,8 @@
         "answer_with_chatgpt": "Odpowiedz z ChatGPT",
         "ask_chatgpt": "Zapytaj ChatGPT",
         "loading": "Ładowanie...",
-        "function_unavailable_in_inline_mode": "Ta funkcja jest niedostępna w trybie inline"
+        "function_unavailable_in_inline_mode": "Ta funkcja jest niedostępna w trybie inline",
+        "setconfig_description": "Modify the configs if you have access to."
     },
     "pt-br": {
         "help_description": "Mostra a mensagem de ajuda",
@@ -647,7 +659,8 @@
         "answer_with_chatgpt": "Responder com ChatGPT",
         "ask_chatgpt": "Perguntar ao ChatGPT",
         "loading": "Carregando...",
-        "function_unavailable_in_inline_mode": "Esta função não está disponível no modo inline"
+        "function_unavailable_in_inline_mode": "Esta função não está disponível no modo inline",
+        "setconfig_description": "Modifique as configurações se você tiver acesso."
     },
     "ru": {
         "help_description":"Показать справочное сообщение",
@@ -697,7 +710,8 @@
         "answer_with_chatgpt":"Ответить с помощью ChatGPT",
         "ask_chatgpt":"Спросить ChatGPT",
         "loading":"Загрузка...",
-        "function_unavailable_in_inline_mode": "Эта функция недоступна в режиме inline"
+        "function_unavailable_in_inline_mode": "Эта функция недоступна в режиме inline",
+        "setconfig_description": "Измените настройки, если у вас есть к ним доступ."
     },
     "tr": {
         "help_description":"Yardım mesajını göster",
@@ -747,7 +761,8 @@
         "answer_with_chatgpt":"ChatGPT ile cevapla",
         "ask_chatgpt":"ChatGPT'ye sor",
         "loading":"Yükleniyor...",
-        "function_unavailable_in_inline_mode": "Bu işlev inline modda kullanılamaz"
+        "function_unavailable_in_inline_mode": "Bu işlev inline modda kullanılamaz",
+        "setconfig_description": "Erişiminiz varsa yapılandırmaları değiştirin."
     },
     "uk": {
         "help_description":"Показати повідомлення допомоги",
@@ -797,7 +812,8 @@
         "answer_with_chatgpt":"Відповідь за допомогою ChatGPT",
         "ask_chatgpt":"Запитати ChatGPT",
         "loading":"Завантаження...",
-        "function_unavailable_in_inline_mode": "Ця функція недоступна в режимі Inline"
+        "function_unavailable_in_inline_mode": "Ця функція недоступна в режимі Inline",
+        "setconfig_description": "Змініть налаштування, якщо у вас є до них доступ."
     },
     "uz": {
         "help_description": "Yordam xabarini ko'rsatish",
@@ -847,7 +863,8 @@
         "answer_with_chatgpt": "ChatGPT bilan javob berish",
         "ask_chatgpt": "ChatGPTdan so'rash",
         "loading": "Yuklanmoqda...",
-        "function_unavailable_in_inline_mode": "Bu funksiya inline rejimida mavjud emas"
+        "function_unavailable_in_inline_mode": "Bu funksiya inline rejimida mavjud emas",
+        "setconfig_description": "Agar sizda kirish huquqi bo'lsa, konfiguratsiyalarni o'zgartiring."
     },
     "vi": {
         "help_description":"Hiển thị trợ giúp",
@@ -897,7 +914,8 @@
         "answer_with_chatgpt":"Trả lời với ChatGPT",
         "ask_chatgpt":"Hỏi ChatGPT",
         "loading":"Đang tải...",
-        "function_unavailable_in_inline_mode": "Chức năng này không khả dụng trong chế độ nội tuyến"
+        "function_unavailable_in_inline_mode": "Chức năng này không khả dụng trong chế độ nội tuyến",
+        "setconfig_description": "Chỉnh sửa cấu hình nếu bạn có quyền truy cập."
     },
     "zh-cn": {
         "help_description":"显示帮助信息",
@@ -947,7 +965,8 @@
         "answer_with_chatgpt":"使用ChatGPT回答",
         "ask_chatgpt":"询问ChatGPT",
         "loading":"载入中...",
-        "function_unavailable_in_inline_mode": "此功能在内联模式下不可用"
+        "function_unavailable_in_inline_mode": "此功能在内联模式下不可用",
+        "setconfig_description": "如果您有权限，请修改配置。"
     },
     "zh-tw": {
         "help_description":"顯示幫助訊息",
@@ -997,6 +1016,7 @@
         "answer_with_chatgpt":"使用 ChatGPT 回答",
         "ask_chatgpt":"詢問 ChatGPT",
         "loading":"載入中...",
-        "function_unavailable_in_inline_mode": "此功能在內嵌模式下不可用"
+        "function_unavailable_in_inline_mode": "此功能在內嵌模式下不可用",
+        "setconfig_description": "如果您有權限，請修改配置。"
     }
 }
