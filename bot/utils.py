@@ -340,7 +340,7 @@ async def handle_direct_result(config, update: Update, response: any,direct_capt
         elif format == 'path':
             await update.effective_message.reply_photo(**common_args, photo=open(value, 'rb'))
         if costly:
-            usage[user_id].add_image_request(image_size, self.config['image_prices'])
+            usage.add_image_request(image_size, config['image_prices'])
     elif kind == 'gif' or kind == 'file':
         if format == 'url':
             i=1

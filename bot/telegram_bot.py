@@ -96,8 +96,6 @@ class ChatGPTTelegramBot:
         self.last_message = {}
         self.inline_queries_cache = {}
 
-        self.awaiting_users = set()
-
         self.logger = self.create_user_logger(self.user_id)
 
     async def user_update(self, update:Update, context:ContextTypes.DEFAULT_TYPE, is_inline=False):
@@ -1155,10 +1153,12 @@ class ChatGPTTelegramBot:
             return
 
         # If the user is awaiting channel ID input, do nothing here.
-        if update.message.from_user.id in self.awaiting_users :
+        dummy , is_awaiting = self.usage[user.id].retrieve_config_value('telegram', 'is_awaiting', True)
+        if is_awaiting :
             return
         if not await is_allowed(self.config, update, context):
-            self.awaiting_users.add(user.id)
+            # self.awaiting_users.add(user.id)
+            self.usage[user.id].update_telegram_config(True, 'is_awaiting', True)
             await self.send_disallowed_markup(update,context)
             return
 
@@ -1459,7 +1459,8 @@ class ChatGPTTelegramBot:
         query = update.callback_query
         await query.answer()
         user = update.effective_user
-        self.awaiting_users.add(user.id)
+        # self.awaiting_users.add(user.id)
+        self.usage[user.id].update_telegram_config(True, 'is_awaiting', True)
         user_info = (
             f"Join request from:\n"
             f"Name: {user.full_name}\n"
@@ -1503,7 +1504,8 @@ class ChatGPTTelegramBot:
         
         if action == "admin_approve":
             self.usage[self.user_id] = UsageTracker(self.user_id, user.username, self.chat_id)
-            self.awaiting_users.remove(self.user_id)
+            # self.awaiting_users.remove(self.user_id)
+            self.usage[self.user_id].update_telegram_config(True,'is_awaiting',False)
             self.usage[self.user_id].update_telegram_config(True,'is_allowed',True)
             await context.bot.send_message(
                 chat_id=self.chat_id,
@@ -1511,7 +1513,7 @@ class ChatGPTTelegramBot:
             )
             response_text = f"User {self.user_id} has been approved."
         elif action == "admin_deny":
-            self.awaiting_users.remove(user_id)
+            self.usage[user_id_str].update_telegram_config(True, 'is_awaiting', False)
             self.usage[self.user_id].update_telegram_config(True,'id_forbidden',True)
             await context.bot.send_message(
                 chat_id=self.chat_id,

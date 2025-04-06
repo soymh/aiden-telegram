@@ -23,6 +23,7 @@ from plugins.latex_to_image import LatexToImagePlugin
 from plugins.arxiv_extract import ArxivContentScraperPlugin
 from plugins.wikipedia_search import WikipediaSearchPlugin
 from plugins.image_gen import ImageGeneratorPlugin
+from plugins.reddit_helper import RedditHelper
 
 
 class PluginManager:
@@ -56,6 +57,7 @@ class PluginManager:
             'arxiv_extract': ArxivContentScraperPlugin,
             'wikipedia_search': WikipediaSearchPlugin,
             'image_gen': ImageGeneratorPlugin,
+            'reddit_helper': RedditHelper
         }
         self.plugins = [plugin_mapping[plugin]() for plugin in enabled_plugins if plugin in plugin_mapping]
 

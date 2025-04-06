@@ -41,8 +41,11 @@ class UsageTracker:
         self.user_id = user_id
         self.chat_id = chat_id 
         self.logs_dir = logs_dir
-        # path to usage file of given user
+
+        # path to usage file of given user and creation
         self.user_file = f"{logs_dir}/{user_id}.json"
+        pathlib.Path(logs_dir).mkdir(exist_ok=True)
+
         user_ids_list = [
             filename[:-5] for filename in os.listdir(logs_dir)
             if os.path.isfile(os.path.join(logs_dir, filename)) and filename.lower().endswith('.json')
@@ -107,6 +110,7 @@ class UsageTracker:
             'user_ids_list': ','.join(user_ids_list) if user_ids_list != [] else os.environ.get('ADMIN_USER_IDS', '-'),
             'is_admin': str(self.user_id) in os.environ.get('ADMIN_USER_IDS', '-').split(','),
             'is_allowed': False,
+            'is_awaiting': False,
             'is_forbidden': False,
 
 
@@ -203,7 +207,7 @@ class UsageTracker:
         self.openai_exclude = {'flux_base_url', 'vision_max_tokens', 'enable_vision_follow_up_questions', 'whisper_prompt', 'functions_max_consecutive_calls'}
 
         self.telegram_keys = {key for key in self.telegram_config.keys()}
-        self.tel_exclude = {'token', 'admin_user_id', 'user_ids_list', 'is_admin', 'is_allowed', 'is_forbidden', 'budget_period', 'user_budgets', 'guest_budget', 'token_price', 'image_prices', 'transcription_price', 'vision_token_price', 'tts_prices', 'proxy'}
+        self.tel_exclude = {'token', 'admin_user_id', 'user_ids_list', 'is_admin', 'is_awaiting', 'is_allowed', 'is_forbidden', 'budget_period', 'user_budgets', 'guest_budget', 'token_price', 'image_prices', 'transcription_price', 'vision_token_price', 'tts_prices', 'proxy'}
                             
 
     def save_state(self):
@@ -218,6 +222,10 @@ class UsageTracker:
         """
         Update conversations dict in usage.
         """
+        now = datetime.now()
+        formatted_now = now.strftime("%Y-%m-%d %H:%M:%S")
+
+
         if update_value:
             if not reset:
                 if str(chat_id) in self.usage['conversations'] :
@@ -226,6 +234,7 @@ class UsageTracker:
                     self.usage['conversations'][str(chat_id)] = []
                     self.usage['conversations'][str(chat_id)].append(update_value)
             else:
+                self.usage['conversations'][str(formatted_now)] = self.usage['conversations'][str(chat_id)]
                 self.usage['conversations'][str(chat_id)] = [update_value]
             with open(self.user_file, "w") as outfile:
                 json.dump(self.usage, outfile, indent=4)
