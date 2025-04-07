@@ -317,7 +317,7 @@ class OpenAIHelper:
             if exceeded_max_tokens or exceeded_max_history_size:
                 self.logger.info(f'Chat history for chat ID {self.chat_id} is too long. Summarising...')
                 try:
-                    summary = await self.__summarise(self.user_id, self.user_name, self.conversations[str(self.chat_id)][:-1])
+                    summary = await self.__summarise(self.user_id, self.username, self.conversations[str(self.chat_id)][:-1])
                     self.logger.debug(f'Summary: {summary}')
                     self.reset_chat_history(self.user_id, self.username, self.chat_id, self.conversations[str(self.chat_id)][0]['content'])
                     self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=summary)
@@ -426,7 +426,11 @@ class OpenAIHelper:
         :param prompt: The prompt to send to the model
         :return: The image URL and the image size
         """
-        self.user_update(user_id, username, chat_id)
+        if user_id and username and chat_id:
+            self.user_update(user_id, username, chat_id)
+        else :
+            self.logger.warning(f"Tool called for image generation")
+        
 
         bot_language = self.config['bot_language']
         try:
@@ -600,7 +604,7 @@ class OpenAIHelper:
                 try:
                     
                     last = self.conversations[str(self.chat_id)][-1]
-                    summary = await self.__summarise(self.user_id, self.user_name, self.conversations[str(self.chat_id)][:-1])
+                    summary = await self.__summarise(self.user_id, self.username, self.conversations[str(self.chat_id)][:-1])
                     self.logger.debug(f'Summary: {summary}')
                     self.reset_chat_history(self.user_id, self.username, self.chat_id, self.conversations[str(self.chat_id)][0]['content'])
                     self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=summary)

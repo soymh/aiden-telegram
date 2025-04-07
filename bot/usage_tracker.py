@@ -2,7 +2,7 @@ import os.path
 import pathlib
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 from dotenv import load_dotenv
 import logging
 

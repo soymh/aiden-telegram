@@ -557,7 +557,7 @@ class ChatGPTTelegramBot:
                     # self.usage[self.user_id].add_chat_tokens(input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens)
 
                     if str(self.user_id) not in user_ids_list and 'guests' in self.usage:
-                        self.usage["guests"].add_chat_tokens(output_tokens=total_tokens)
+                        self.usage["guests"].add_chat_tokens(output_tokens=output_tokens)
 
                     # Split into chunks of 4096 characters (Telegram's message limit)
                     transcript_output = (
@@ -736,13 +736,13 @@ class ChatGPTTelegramBot:
 
                     i += 1
                     if tokens != 'not_finished':
-                        total_tokens = int(tokens)
+                        output_tokens = int(tokens)
 
                 
             else:
 
                 try:
-                    interpretation, total_tokens = await self.openai.interpret_image(self.user_id, self.username, chat_id, temp_file_png, prompt=prompt)
+                    interpretation, output_tokens = await self.openai.interpret_image(self.user_id, self.username, chat_id, temp_file_png, prompt=prompt)
 
 
                     try:
@@ -776,16 +776,16 @@ class ChatGPTTelegramBot:
                         parse_mode=constants.ParseMode.MARKDOWN
                     )
             vision_token_price = self.config['vision_token_price']
-            self.usage[self.user_id].add_vision_tokens(total_tokens, vision_token_price)
+            self.usage[self.user_id].add_vision_tokens(output_tokens, vision_token_price)
 
             user_ids_list = self.config['user_ids_list'].split(',')
             if str(self.user_id) not in user_ids_list and 'guests' in self.usage:
-                self.usage["guests"].add_vision_tokens(total_tokens, vision_token_price)
+                self.usage["guests"].add_vision_tokens(output_tokens, vision_token_price)
 
         await wrap_with_indicator(update, context, _execute, constants.ChatAction.TYPING)
 
     async def process_openai_response(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt, chat_id, role:str, super_access=False):
-        input_tokens = output_tokens = cached_tokens = total_tokens = 0
+        input_tokens = output_tokens = cached_tokens = 0
         await self.user_update(update,context)
 
         try:
@@ -809,9 +809,6 @@ class ChatGPTTelegramBot:
                         direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user.Answer to next function calls/prompts since they are different from the past ones."
                         direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
-                        # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
-                        # self.logger.info(f"direct caption is : {direct_caption}")
-                        total_tokens += direct_tokens
                         return await handle_direct_result(self.config, update, content , direct_caption)
 
                     if len(content.strip()) == 0:
@@ -878,7 +875,7 @@ class ChatGPTTelegramBot:
 
                     i += 1
                     if tokens != 'not_finished':
-                        total_tokens = int(tokens)
+                        output_tokens = int(tokens)
 
             # Handle non-streaming response
             else:
@@ -889,7 +886,9 @@ class ChatGPTTelegramBot:
                         direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user.Answer to next function calls/prompts since they are different from the past ones."
                         direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
                         # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
-                        # self.logger.info(f"direct caption is : {direct_caption} and direct token: {direct_tokens}")
+                        self.logger.info(f"direct output tokens are : {direct_output_tokens}, output tokens are : {output_tokens}")
+                        output_tokens = int(output_tokens)
+                        output_tokens += int(direct_output_tokens)
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
                         return await handle_direct_result(self.config, update, response , direct_caption)
 
@@ -1270,7 +1269,7 @@ class ChatGPTTelegramBot:
         try:
             if callback_data.startswith(callback_data_suffix):
                 unique_id = callback_data.split(':')[1]
-                input_tokens = output_tokens = cached_tokens = total_tokens = 0
+                input_tokens = output_tokens = cached_tokens = 0
 
                 # Retrieve the prompt from the cache
                 query = self.inline_queries_cache.get(unique_id)
@@ -1346,7 +1345,7 @@ class ChatGPTTelegramBot:
 
                         i += 1
                         if tokens != 'not_finished':
-                            total_tokens = int(tokens)
+                            output_tokens = int(tokens)
 
                 else:
                     async def _send_inline_query_response():
@@ -1379,7 +1378,7 @@ class ChatGPTTelegramBot:
 
                     await wrap_with_indicator(update, context, _send_inline_query_response,
                                               constants.ChatAction.TYPING, is_inline=True)
-
+                output_tokens = int(output_tokens)
                 add_chat_request_to_usage_tracker(self.usage, self.config, user_id, input_tokens, output_tokens, cached_tokens)
 
         except Exception as e:
