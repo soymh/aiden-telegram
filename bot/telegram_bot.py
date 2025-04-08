@@ -797,7 +797,6 @@ class ChatGPTTelegramBot:
                 )
 
                 stream_response = self.openai.get_chat_response_stream(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
-                # self.usage[self.user_id].add_chat_tokens(input_string=prompt)
                 i = 0
                 prev = ''
                 sent_message = None
@@ -934,26 +933,33 @@ class ChatGPTTelegramBot:
         Handles channel-related commands: forwarding or sending messages based on keywords.
         """
         user = update.effective_user
-        dummy, FORWARD_KEYWORD = self.usage[user.id].retrieve_config_value('telegram_config','forward_keyword') if user.id in self.usage else "None"
-        dummy, CHANNEL_ID = self.usage[user.id].retrieve_config_value('telegram_config','channel_id') if user.id in self.usage else "None"
-        if prompt.lower().startswith(FORWARD_KEYWORD.lower()):
+        await self.user_update(update,context)
+        forward_keyword = self.config["forward_keyword"]
+        channel_id = self.config["channel_id"]
+
+        if prompt.lower().startswith(forward_keyword.lower()):
+            if (channel_id or forward_keyword) in [""]  :
+                missing_response = "-ONLY- Tell the user the message hasn't been sent to their channel,"  
+                "because they haven't set channel_id or forward_keyword in the config."
+                await self.process_openai_response(update, context, missing_response, chat_id,role="system")
+                return
             # Extract the part of the prompt after the forward keyword and strip spaces.
-            user_input_after_keyword = prompt[len(FORWARD_KEYWORD):].strip()
+            user_input_after_keyword = prompt[len(forward_keyword):].strip()
             # If no extra content is provided, forward the replied-to message.
             if not user_input_after_keyword:
                 await context.bot.forward_message(
-                    chat_id=CHANNEL_ID,
+                    chat_id=channel_id,
                     from_chat_id=update.message.chat.id,
                     message_id=update.effective_message.reply_to_message.message_id
                 )
             else:
                 await context.bot.forward_message(
-                    chat_id=CHANNEL_ID,
+                    chat_id=channel_id,
                     from_chat_id=update.message.chat.id,
                     message_id=update.message.message_id
                 )
             self.logger.info(
-                f"Forwarded message to the channel {CHANNEL_ID}: %s", 
+                f"Forwarded message to the channel {channel_id}: %s", 
                 update.effective_message.reply_to_message.text
             )
             forward_response = "-ONLY- Tell the user their message has been forwarded to their channel successfully."
@@ -967,7 +973,7 @@ class ChatGPTTelegramBot:
     ):
         """Handles moderation requests in group chats."""
         self.logger.info(
-            f"User requested for `Indirect` Group moderation with message_thread_id:{message_thread_id} and group_id={group_id}"
+            f"User requested for `Indirect` Group/Channel moderation with message_thread_id:{message_thread_id} and group_id={group_id}"
         )
         
         # Call the common reply-checking logic.
@@ -1011,20 +1017,21 @@ class ChatGPTTelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, chat_id: int, message_thread_id: int
     ):
         """Handles prompts in group chats, including trigger keyword checks and reply handling."""
+        user = update.effective_user
         gp_trigger_keyword = self.config["group_trigger_keyword"]
         mod_trigger_keyword = self.config["mod_trigger_keyword"]
-        FORWARD_KEYWORD = os.getenv("FORWARD_KEYWORD", "forward it :")
+        forward_keyword = self.config["forward_keyword"]
 
         reply = update.effective_message.reply_to_message
         
-        if prompt.lower().startswith(FORWARD_KEYWORD.lower()):
+        if prompt.lower().startswith(forward_keyword.lower()):
             await self.handle_channel_commands(update, context, prompt, chat_id)
         elif prompt.lower().startswith(mod_trigger_keyword.lower()):
             await self.handle_moderation_request(update, context, prompt, chat_id, message_thread_id, update.effective_message.chat.id)
         elif prompt.lower().startswith(gp_trigger_keyword.lower()) or update.effective_message.text.lower().startswith("/chat"):
             if prompt.lower().startswith(gp_trigger_keyword.lower()):
                 prompt = prompt[len(gp_trigger_keyword) :].strip()
-                if prompt.lower().startswith(FORWARD_KEYWORD.lower()):
+                if prompt.lower().startswith(forward_keyword.lower()):
                     await self.handle_channel_commands(update, context, prompt, chat_id)
                     return
             elif prompt.lower().startswith("/chat"):
@@ -1124,11 +1131,11 @@ class ChatGPTTelegramBot:
 
     async def handle_private_chat_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, chat_id: int):
         """Handles prompts in private chats, mirroring group chat handling."""
+        user = update.effective_user
         original_prompt = prompt
         mod_trigger_keyword = self.config["mod_trigger_keyword"]
-        FORWARD_KEYWORD = os.getenv("FORWARD_KEYWORD", "forward it :")
-
-        if prompt.lower().startswith(FORWARD_KEYWORD.lower()):
+        forward_keyword = self.config["forward_keyword"]
+        if prompt.lower().startswith(forward_keyword.lower()):
             await self.handle_channel_commands(update, context, prompt, chat_id)
         elif prompt.lower().startswith(mod_trigger_keyword.lower()):
             await self.handle_moderation_request(update, context, prompt, chat_id, 0, chat_id)  # Using 0 as message_thread_id for private chats

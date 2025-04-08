@@ -101,7 +101,7 @@ class UsageTracker:
         self.telegram_config = {
             # Telegram Bot Configuration
             'token': os.environ['TELEGRAM_BOT_TOKEN'],
-            'mod_bot_token': os.environ.get("MODRATOR_TOKEN", ""),  # maps to BOT_TOKEN_MODERATOR
+            'mod_bot_token': os.environ.get("MODERATOR_TOKEN", ""),
             'channel_id': os.environ.get('CHANNEL_ID', ""),
             'group_id': os.environ.get('GROUP_ID', ""),
             
@@ -218,28 +218,33 @@ class UsageTracker:
             json.dump(self.usage, outfile, indent=4)
 
 
-    def do_conversations(self,update_value=None,chat_id=None,reset=False):
+    def do_conversations(self, chat_id, update_value=None,reset=False):
         """
         Update conversations dict in usage.
         """
         now = datetime.now()
         formatted_now = now.strftime("%Y-%m-%d %H:%M:%S")
 
+        conversation = self.usage['conversations']
 
         if update_value:
             if not reset:
-                if str(chat_id) in self.usage['conversations'] :
-                    self.usage['conversations'][str(chat_id)].append(update_value)
+                if str(chat_id) in conversation :
+                    conversation[str(chat_id)].append(update_value)
                 else :
-                    self.usage['conversations'][str(chat_id)] = []
-                    self.usage['conversations'][str(chat_id)].append(update_value)
+                    conversation[str(chat_id)] = []
+                    conversation[str(chat_id)].append(update_value)
             else:
-                self.usage['conversations'][str(formatted_now)] = self.usage['conversations'][str(chat_id)]
-                self.usage['conversations'][str(chat_id)] = [update_value]
+                conversation[str(formatted_now)] = conversation[str(chat_id)]
+                conversation[str(chat_id)] = [update_value]
             with open(self.user_file, "w") as outfile:
                 json.dump(self.usage, outfile, indent=4)
             return
-        return self.usage['conversations']
+        
+        main_conversation = conversation[str(chat_id)]
+        main_conversation = {chat_id: main_conversation}
+
+        return main_conversation
 
     def do_vision_conversations(self,update_value=None,chat_id=None):
         """
