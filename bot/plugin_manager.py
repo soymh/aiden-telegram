@@ -19,7 +19,6 @@ from plugins.telegram_moderator import TelegramModerator
 from plugins.web_extract import WebContentScraperPlugin
 from plugins.arxiv_search import ArXivSearchPlugin
 from plugins.telegram_extract import TelegramScraperPlugin
-from plugins.latex_to_image import LatexToImagePlugin
 from plugins.arxiv_extract import ArxivContentScraperPlugin
 from plugins.wikipedia_search import WikipediaSearchPlugin
 from plugins.image_gen import ImageGeneratorPlugin
@@ -53,7 +52,6 @@ class PluginManager:
             'web_extract': WebContentScraperPlugin,
             'arxiv_search': ArXivSearchPlugin,
             'telegram_extract': TelegramScraperPlugin,
-            'latex_to_image': LatexToImagePlugin,
             'arxiv_extract': ArxivContentScraperPlugin,
             'wikipedia_search': WikipediaSearchPlugin,
             'image_gen': ImageGeneratorPlugin,

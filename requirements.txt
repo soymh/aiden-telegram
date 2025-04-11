@@ -12,10 +12,10 @@ pytube~=15.0.0
 gtts~=2.5.4
 whois~=0.9.27
 Pillow~=11.0.0
-beautifulsoup4
-markdownify
-feedparser
-html2text
-pyperclip
-Requests
-wikipedia
+beautifulsoup4==4.13.3
+markdownify==1.1.0
+feedparser==6.0.11
+html2text==2024.2.26
+pyperclip==1.9.0
+requests==2.32.3
+wikipedia==1.4.0
