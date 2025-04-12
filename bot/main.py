@@ -1,5 +1,8 @@
 import logging
 import os
+import threading
+from flask import Flask
+import requests
 
 from dotenv import load_dotenv
 
@@ -9,6 +12,27 @@ from telegram_bot import ChatGPTTelegramBot
 
 from usage_tracker import UsageTracker
 
+app = Flask(__name__)
+
+# This route will be used to keep the bot alive
+@app.route('/')
+def index():
+    return 'Bot is alive!'
+
+def keep_alive():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    while True:
+        try:
+            response = requests.get(f"{os.environ.get('BOT_URL', 'http://localhost:5000')}")
+            if response.status_code == 200:
+                print("Bot is alive.")
+            else:
+                print(f"Unexpected response status: {response.status_code}")
+        except Exception as error:
+            print(f"Failed to maintain bot activity: {error}")
+        # Sleep for 5 minutes
+        import time
+        time.sleep(300)
 
 def main():
     # Read .env file
@@ -16,10 +40,6 @@ def main():
     first_admin = os.environ.get('ADMIN_USER_IDS','0').split(',')[0]
     admin_tracker = UsageTracker(user_id=first_admin, username='admin',chat_id=first_admin ,default_max_tokens=default_max_tokens,are_functions_available=are_functions_available)
     users_directory = admin_tracker.logs_dir
-    # user_ids_list_list = [
-    #     filename[:-5] for filename in os.listdir(users_directory)
-    #     if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
-    # ]
 
     # Setup logging
     logging.basicConfig(
@@ -45,40 +65,6 @@ def main():
     max_tokens_default = default_max_tokens(model=model)
 
     enable_functions = os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true'
-    # openai_config = {
-    #     'api_key': os.environ['OPENAI_API_KEY'],
-    #     'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
-    #     'stream': os.environ.get('STREAM', 'true').lower() == 'true',
-    #     'proxy': os.environ.get('PROXY', None) or os.environ.get('OPENAI_PROXY', None),
-    #     'max_history_size': int(os.environ.get('MAX_HISTORY_SIZE', 15)),
-    #     'max_conversation_age_minutes': int(os.environ.get('MAX_CONVERSATION_AGE_MINUTES', 180)),
-    #     'assistant_prompt': os.environ.get('ASSISTANT_PROMPT', 'You are a helpful assistant.'),
-    #     'max_tokens': int(os.environ.get('MAX_TOKENS', max_tokens_default)),
-    #     'n_choices': int(os.environ.get('N_CHOICES', 1)),
-    #     'temperature': float(os.environ.get('TEMPERATURE', 1.0)),
-    #     'image_model': os.environ.get('IMAGE_MODEL', 'dall-e-3'),
-    #     'image_quality': os.environ.get('IMAGE_QUALITY', 'standard'),
-    #     'image_style': os.environ.get('IMAGE_STYLE', 'vivid'),
-    #     'image_size': os.environ.get('IMAGE_SIZE', '1024x1024'),
-    #     'model': model,
-    #     'enable_functions': os.environ.get('ENABLE_FUNCTIONS', str(functions_available)).lower() == 'true',
-    #     'functions_max_consecutive_calls': int(os.environ.get('FUNCTIONS_MAX_CONSECUTIVE_CALLS', 10)),
-    #     'presence_penalty': float(os.environ.get('PRESENCE_PENALTY', 0.0)),
-    #     'frequency_penalty': float(os.environ.get('FREQUENCY_PENALTY', 0.0)),
-    #     'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
-    #     'show_plugins_used': os.environ.get('SHOW_PLUGINS_USED', 'false').lower() == 'true',
-    #     'whisper_prompt': os.environ.get('WHISPER_PROMPT', ''),
-    #     'vision_model': os.environ.get('VISION_MODEL', 'gpt-4o'),
-    #     'enable_vision_follow_up_questions': os.environ.get('ENABLE_VISION_FOLLOW_UP_QUESTIONS', 'true').lower() == 'true',
-    #     'vision_prompt': os.environ.get('VISION_PROMPT', 'What is in this image'),
-    #     'vision_detail': os.environ.get('VISION_DETAIL', 'auto'),
-    #     'vision_max_tokens': int(os.environ.get('VISION_MAX_TOKENS', '300')),
-    #     'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
-    #     'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
-    #     'flux_base_url': os.environ.get('FLUX_BASE_URL','https://api.together.xyz/v1'),
-
-    # }
-
     if enable_functions and not functions_available:
         logging.error(f'ENABLE_FUNCTIONS is set to true, but the model {model} does not support it. '
                         'Please set ENABLE_FUNCTIONS to false or use a model that supports it.')
@@ -90,47 +76,19 @@ def main():
         logging.warning('The environment variable MONTHLY_GUEST_BUDGET is deprecated. '
                         'Please use GUEST_BUDGET with BUDGET_PERIOD instead.')
 
-    # telegram_config = {
-    #     'token': os.environ['TELEGRAM_BOT_TOKEN'],
-    #     'admin_user_ids': os.environ.get('ADMIN_USER_IDS', '-'),
-    #     'user_ids_list': ','.join(user_ids_list_list) if user_ids_list_list!=[] else os.environ.get('ADMIN_USER_IDS', '-'),
-    #     'allow_group_users': os.environ.get('ALLOW_GROUP_USERS','false').lower() == 'true',
-    #     'enable_quoting': os.environ.get('ENABLE_QUOTING', 'true').lower() == 'true',
-    #     'enable_image_generation': os.environ.get('ENABLE_IMAGE_GENERATION', 'true').lower() == 'true',
-    #     'enable_transcription': os.environ.get('ENABLE_TRANSCRIPTION', 'true').lower() == 'true',
-    #     'enable_vision': os.environ.get('ENABLE_VISION', 'true').lower() == 'true',
-    #     'enable_tts_generation': os.environ.get('ENABLE_TTS_GENERATION', 'true').lower() == 'true',
-    #     'budget_period': os.environ.get('BUDGET_PERIOD', 'monthly').lower(),
-    #     'user_budgets': os.environ.get('USER_BUDGETS', os.environ.get('MONTHLY_USER_BUDGETS', '*')),
-    #     'guest_budget': float(os.environ.get('GUEST_BUDGET', os.environ.get('MONTHLY_GUEST_BUDGET', '100.0'))),
-    #     'stream': os.environ.get('STREAM', 'true').lower() == 'true',
-    #     'proxy': os.environ.get('PROXY', None) or os.environ.get('TELEGRAM_PROXY', None),
-    #     'voice_reply_transcript': os.environ.get('VOICE_REPLY_WITH_TRANSCRIPT_ONLY', 'false').lower() == 'true',
-    #     'voice_reply_prompts': os.environ.get('VOICE_REPLY_PROMPTS', '').split(';'),
-    #     'ignore_group_transcriptions': os.environ.get('IGNORE_GROUP_TRANSCRIPTIONS', 'true').lower() == 'true',
-    #     'ignore_group_vision': os.environ.get('IGNORE_GROUP_VISION', 'true').lower() == 'true',
-    #     'group_trigger_keyword': os.environ.get('GROUP_TRIGGER_KEYWORD', ''),
-    #     'mod_trigger_keyword': os.environ.get('MOD_TRIGGER_KEYWORD', ''),
-    #     'token_price': float(os.environ.get('TOKEN_PRICE', 0.002)),
-    #     'image_prices': [float(i) for i in os.environ.get('IMAGE_PRICES', "0.016,0.018,0.02").split(",")],
-    #     'vision_token_price': float(os.environ.get('VISION_TOKEN_PRICE', '0.01')),
-    #     'image_receive_mode': os.environ.get('IMAGE_FORMAT', "photo"),
-    #     'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
-    #     'tts_prices': [float(i) for i in os.environ.get('TTS_PRICES', "0.015,0.030").split(",")],
-    #     'transcription_price': float(os.environ.get('TRANSCRIPTION_PRICE', 0.006)),
-    #     'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
-    # }
-
     plugin_config = {
         'plugins': os.environ.get('PLUGINS', '').split(',')
     }
 
     # Setup and run ChatGPT and Telegram bot
     plugin_manager = PluginManager(config=plugin_config)
-    openai_helper = OpenAIHelper( plugin_manager=plugin_manager)
+    openai_helper = OpenAIHelper(plugin_manager=plugin_manager)
     telegram_bot = ChatGPTTelegramBot(openai=openai_helper)
-    telegram_bot.run()
 
+    # Start Flask server in a separate thread
+    threading.Thread(target=keep_alive).start()
+
+    telegram_bot.run()
 
 if __name__ == '__main__':
     main()
