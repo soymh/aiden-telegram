@@ -227,19 +227,19 @@ class UsageTracker:
 
         if update_value:
             if not reset:
-                if chat_id in self.usage['conversations'] :
-                    self.usage['conversations'][chat_id].append(update_value)
+                if str(chat_id) in self.usage['conversations'] :
+                    self.usage['conversations'][str(chat_id)].append(update_value)
                 else :
-                    self.usage['conversations'][chat_id] = []
-                    self.usage['conversations'][chat_id].append(update_value)
+                    self.usage['conversations'][str(chat_id)] = []
+                    self.usage['conversations'][str(chat_id)].append(update_value)
             else:
-                self.usage['conversations'][str(formatted_now)] = self.usage['conversations'][chat_id]
-                self.usage['conversations'][chat_id] = [update_value]
+                self.usage['conversations'][str(formatted_now)] = self.usage['conversations'][str(chat_id)]
+                self.usage['conversations'][str(chat_id)] = [update_value]
             with open(self.user_file, "w") as outfile:
                 json.dump(self.usage, outfile, indent=4)
             return
-        
-        main_conversation = self.usage['conversations'][chat_id]
+
+        main_conversation = self.usage['conversations'][str(chat_id)]
         main_conversation = {chat_id: main_conversation}
 
         return main_conversation
