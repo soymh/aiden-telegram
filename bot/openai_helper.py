@@ -122,6 +122,8 @@ class OpenAIHelper:
         http_client = httpx.AsyncClient(proxy=self.config['proxy']) if 'proxy' in self.config else None
         self.client = openai.AsyncOpenAI(api_key=self.config['api_key'], http_client=http_client)
 
+        self.media_client = openai.AsyncOpenAI(api_key=self.config['openai_media_api_key'],base_url=self.config['openai_media_base_url'], http_client=http_client)
+
         self.plugin_manager = plugin_manager
         self.conversations: dict[int: list] = {}
         self.conversations_vision: dict[int: bool] = {}
@@ -387,6 +389,7 @@ class OpenAIHelper:
                 else:
                     return response, plugins_used
         else:
+            self.logger.info(f"responses are:{ response}")
             if len(response.choices) > 0:
                 first_choice = response.choices[0]
                 if first_choice.message.function_call:
@@ -450,7 +453,7 @@ class OpenAIHelper:
 
         bot_language = self.config['bot_language']
         try:
-            response = await self.client.images.generate(
+            response = await self.media_client.images.generate(
                 prompt=prompt,
                 n=1,
                 model=self.config['image_model'],
@@ -549,7 +552,7 @@ class OpenAIHelper:
 
         bot_language = self.config['bot_language']
         try:
-            response = await self.client.audio.speech.create(
+            response = await self.media_client.audio.speech.create(
                 model=self.config['tts_model'],
                 voice=self.config['tts_voice'],
                 input=text,
@@ -572,7 +575,7 @@ class OpenAIHelper:
         try:
             with open(filename, "rb") as audio:
                 prompt_text = self.config['whisper_prompt']
-                result = await self.client.audio.transcriptions.create(model="whisper-1", file=audio, prompt=prompt_text)
+                result = await self.media_client.audio.transcriptions.create(model="whisper-1", file=audio, prompt=prompt_text)
                 return result.text
         except Exception as e:
             self.logger.exception(e)

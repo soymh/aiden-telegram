@@ -55,7 +55,8 @@ class UsageTracker:
             # API Configuration
             'api_key': os.environ['OPENAI_API_KEY'],
             'model': model,
-            
+            'openai_media_base_url': os.environ.get('OPENAI_MEDIA_BASE_URL',None),
+            'openai_media_api_key': os.environ.get('OPENAI_MEDIA_API_KEY',None),
             # Proxy Settings
             'proxy': os.environ.get('PROXY', None) or os.environ.get('OPENAI_PROXY', None),
             
@@ -172,7 +173,7 @@ class UsageTracker:
             if 'transcription_seconds' not in self.usage['usage_history'][str(today)]:
                 self.usage['usage_history'][str(today)]['transcription_seconds'] = 0
             if 'number_images' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['number_images'] = []
+                self.usage['usage_history'][str(today)]['number_images'] = [0,0,0]
             if 'tts_characters' not in self.usage['usage_history'][str(today)]:
                 self.usage['usage_history'][str(today)]['tts_characters'] = {}
             if 'vision_tokens' not in self.usage['usage_history'][str(today)]:
@@ -192,7 +193,7 @@ class UsageTracker:
                     "cached_token_count":int()
                 },
                 "transcription_seconds": int(),
-                "number_images": [],
+                "number_images": [0,0,0],
                 "tts_characters": {},
                 "vision_tokens":int()}
                 },
