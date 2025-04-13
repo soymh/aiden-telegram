@@ -22,7 +22,10 @@ import requests
 
 from usage_tracker import UsageTracker
 
-from gpt_all_models import GPT_ALL_MODELS, GPT_3_MODELS, GPT_3_16K_MODELS, GPT_4_MODELS, GPT_4_32K_MODELS, GPT_4_VISION_MODELS, GPT_4_128K_MODELS, GPT_4O_MODELS, O_MODELS
+from gpt_all_models import GPT_ALL_MODELS, GPT_3_MODELS, GPT_3_16K_MODELS,\
+    GPT_4_MODELS, GPT_4_32K_MODELS, GPT_4_VISION_MODELS, \
+    GPT_4_128K_MODELS, GPT_4O_MODELS, O_MODELS, \
+    GPT_OPENROUTER_MODELS
 
 #TogetherAI Models;Put your desired models from TogetherAI models here
 GPT_TOGETHERAI_MODELS = ("Qwen/Qwen2.5-Coder-32B-Instruct","meta-llama/Llama-3.3-70B-Instruct-Turbo")
@@ -52,6 +55,8 @@ def default_max_tokens(model: str) -> int:
     elif model in GPT_4O_MODELS:
         return 4096
     elif model in O_MODELS:
+        return 4096
+    else :
         return 4096
 
 
@@ -839,6 +844,8 @@ class OpenAIHelper:
             return base * 31
         #set default max tokens from Together.AI to 64,000 tk;increase if you mind!
         if self.config['model'] in GPT_TOGETHERAI_MODELS:
+            return base * 16
+        if self.config['model'] in GPT_OPENROUTER_MODELS:
             return base * 16
         elif self.config['model'] in O_MODELS:
             # https://platform.openai.com/docs/models#o1

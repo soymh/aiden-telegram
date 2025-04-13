@@ -238,8 +238,10 @@ class UsageTracker:
             with open(self.user_file, "w") as outfile:
                 json.dump(self.usage, outfile, indent=4)
             return
-
-        main_conversation = self.usage['conversations'][str(chat_id)]
+        try:
+            main_conversation = self.usage['conversations'][chat_id]
+        except:
+            main_conversation = self.usage['conversations'][str(chat_id)]
         main_conversation = {chat_id: main_conversation}
 
         return main_conversation
