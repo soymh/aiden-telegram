@@ -63,7 +63,18 @@ class PluginManager:
         """
         Return the list of function specs that can be called by the model
         """
-        return [spec for specs in map(lambda plugin: plugin.get_spec(), self.plugins) for spec in specs]
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": spec["name"],
+                    "description": spec["description"],
+                    "parameters": spec["parameters"],
+                }
+            }
+            for specs in map(lambda plugin: plugin.get_spec(), self.plugins)
+            for spec in specs
+        ]
 
     async def call_function(self, function_name, helper, arguments):
         """

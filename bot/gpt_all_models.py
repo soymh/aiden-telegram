@@ -12,8 +12,8 @@ O_MODELS = ("o1", "o1-mini", "o1-preview")
 #TogetherAI Models;Put your desired models from TogetherAI models here
 GPT_TOGETHERAI_MODELS = ("Qwen/Qwen2.5-Coder-32B-Instruct","meta-llama/Llama-3.3-70B-Instruct-Turbo")
 
-GPT_OPENROUTER_MODELS = ("google/gemini-2.0-flash-exp:free","google/gemini-2.5-pro-exp-03-25:free")
+GOOGLE_AI_STUDIO_MODELS = ("google/gemini-2.0-flash-exp:free","google/gemini-2.5-pro-exp-03-25:free", "gemini-2.0-flash")
 
 GPT_ALL_MODELS = GPT_3_MODELS + GPT_3_16K_MODELS + GPT_4_MODELS \
     + GPT_4_32K_MODELS + GPT_4_VISION_MODELS + GPT_4_128K_MODELS \
-    + GPT_4O_MODELS + O_MODELS + GPT_TOGETHERAI_MODELS + GPT_OPENROUTER_MODELS
+    + GPT_4O_MODELS + O_MODELS + GPT_TOGETHERAI_MODELS + GOOGLE_AI_STUDIO_MODELS

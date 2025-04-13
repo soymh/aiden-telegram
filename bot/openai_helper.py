@@ -25,7 +25,7 @@ from usage_tracker import UsageTracker
 from gpt_all_models import GPT_ALL_MODELS, GPT_3_MODELS, GPT_3_16K_MODELS,\
     GPT_4_MODELS, GPT_4_32K_MODELS, GPT_4_VISION_MODELS, \
     GPT_4_128K_MODELS, GPT_4O_MODELS, O_MODELS, \
-    GPT_OPENROUTER_MODELS
+    GOOGLE_AI_STUDIO_MODELS
 
 #TogetherAI Models;Put your desired models from TogetherAI models here
 GPT_TOGETHERAI_MODELS = ("Qwen/Qwen2.5-Coder-32B-Instruct","meta-llama/Llama-3.3-70B-Instruct-Turbo")
@@ -324,11 +324,11 @@ class OpenAIHelper:
             self.__add_to_history(self.user_id, self.username, self.chat_id, role=role, content=query)
 
             # Summarize the chat history if it's too long to avoid excessive token usage
-            token_count = self.__count_tokens(self.conversations[self.chat_id])
-            exceeded_max_tokens = token_count + self.config['max_tokens'] > self.__max_model_tokens()
+            # token_count = self.__count_tokens(self.conversations[self.chat_id])
+            # exceeded_max_tokens = token_count + self.config['max_tokens'] > self.__max_model_tokens()
             exceeded_max_history_size = len(self.conversations[self.chat_id]) > self.config['max_history_size']
 
-            if exceeded_max_tokens or exceeded_max_history_size:
+            if exceeded_max_history_size:
                 self.logger.info(f'Chat history for chat ID {self.chat_id} is too long. Summarising...')
                 try:
                     summary = await self.__summarise(self.user_id, self.username, self.conversations[self.chat_id][:-1])
@@ -344,19 +344,19 @@ class OpenAIHelper:
             common_args = {
                 'model': self.config['model'] if not self.conversations_vision[str(self.chat_id)] else self.config['vision_model'],
                 'messages': self.conversations[self.chat_id],
-                'temperature': self.config['temperature'],
-                'n': self.config['n_choices'],
-                max_tokens_str: self.config['max_tokens'],
-                'presence_penalty': self.config['presence_penalty'],
-                'frequency_penalty': self.config['frequency_penalty'],
-                'stream': stream
+                # 'temperature': self.config['temperature'],
+                # 'n': self.config['n_choices'],
+                # max_tokens_str: self.config['max_tokens'],
+                # 'presence_penalty': self.config['presence_penalty'],
+                # 'frequency_penalty': self.config['frequency_penalty'],
+                # 'stream': stream
             }
 
             if self.config['enable_functions'] and not self.conversations_vision[str(self.chat_id)]:
                 functions = self.plugin_manager.get_functions_specs()
                 if len(functions) > 0:
-                    common_args['functions'] = self.plugin_manager.get_functions_specs()
-                    common_args['function_call'] = 'auto'
+                    common_args['tools'] = self.plugin_manager.get_functions_specs()
+                    common_args['tool_choice'] = 'auto'
             return await self.client.chat.completions.create(**common_args)
 
         except openai.RateLimitError as e:
@@ -377,30 +377,34 @@ class OpenAIHelper:
             async for item in response:
                 if len(item.choices) > 0:
                     first_choice = item.choices[0]
-                    if first_choice.delta and first_choice.delta.function_call:
-                        if first_choice.delta.function_call.name:
-                            function_name += first_choice.delta.function_call.name
-                        if first_choice.delta.function_call.arguments:
-                            arguments += first_choice.delta.function_call.arguments
-                    elif first_choice.finish_reason and first_choice.finish_reason == 'function_call':
+                    if first_choice.delta and first_choice.delta.tool_calls:
+                        if first_choice.delta.tool_calls.name:
+                            function_name += first_choice.delta.tool_calls.name
+                        if first_choice.delta.tool_calls.arguments:
+                            arguments += first_choice.delta.tool_calls.arguments
+                    elif first_choice.finish_reason and first_choice.finish_reason == 'tool_calls':
                         break
                     else:
                         return response, plugins_used
                 else:
                     return response, plugins_used
         else:
-            self.logger.info(f"responses are:{ response}")
+            first_choice = response.choices[0]
+            self.logger.info(f"first choice is :{first_choice}")
+            content = first_choice.message.content
             if len(response.choices) > 0:
-                first_choice = response.choices[0]
-                if first_choice.message.function_call:
-                    if first_choice.message.function_call.name:
-                        function_name += first_choice.message.function_call.name
-                    if first_choice.message.function_call.arguments:
-                        arguments += first_choice.message.function_call.arguments
+                if first_choice.message.tool_calls:
+                    if first_choice.message.tool_calls[0].function.name:
+                        function_name += first_choice.message.tool_calls[0].function.name
+                    if first_choice.message.tool_calls[0].function.arguments:
+                        arguments += first_choice.message.tool_calls[0].function.arguments
                 else:
                     return response, plugins_used
             else:
                 return response, plugins_used
+            self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=content, function_call={"name": function_name})
+
+            
 
         if function_name != "telegram_moderator":
             self.logger.info(f'Calling function {function_name} with arguments {arguments}')
@@ -419,7 +423,6 @@ class OpenAIHelper:
                 function_response = json.dumps({"status": "failed", "details": "You don't have access to this function. Ask the user if they want to moderate telegram ,they have to use '/moderate' command."}, default=str)
 
 
-
         if function_name not in plugins_used:
             plugins_used += (function_name,)
 
@@ -432,8 +435,8 @@ class OpenAIHelper:
         response = await self.client.chat.completions.create(
             model=self.config['model'],
             messages=self.conversations[self.chat_id],
-            functions=self.plugin_manager.get_functions_specs(),
-            function_call='auto' if times < self.config['functions_max_consecutive_calls'] else 'none',
+            tools=self.plugin_manager.get_functions_specs(),
+            tool_choice='auto' if times < self.config['functions_max_consecutive_calls'] else 'none',
             stream=stream
         )
         return await self.__handle_function_call(user_id=self.user_id, username=self.username, chat_id=self.chat_id, response=response, stream=stream, times=times + 1, plugins_used=plugins_used,super_access=super_access)
@@ -799,7 +802,7 @@ class OpenAIHelper:
         self.user_update(user_id, username, chat_id)
 
         self.usage[self.user_id].do_conversations(chat_id, {"role": "function","name": function_name, "content": content})
-    def __add_to_history(self, user_id, username, chat_id, role, content):
+    def __add_to_history(self, user_id, username, chat_id, role, content, function_call=None):
         """
         Adds a message to the conversation history.
         :param chat_id: The chat ID
@@ -807,8 +810,10 @@ class OpenAIHelper:
         :param content: The message content
         """
         self.user_update(user_id, username, chat_id)
-
-        self.usage[self.user_id].do_conversations(self.chat_id, {"role": role, "content": content})
+        if function_call:
+            self.usage[self.user_id].do_conversations(self.chat_id, {"role": role, "content": content, "function_call": function_call})
+        else:
+            self.usage[self.user_id].do_conversations(self.chat_id, {"role": role, "content": content})
 
     async def __summarise(self, user_id: int, username: str, conversation) -> str:
         """
@@ -848,7 +853,7 @@ class OpenAIHelper:
         #set default max tokens from Together.AI to 64,000 tk;increase if you mind!
         if self.config['model'] in GPT_TOGETHERAI_MODELS:
             return base * 16
-        if self.config['model'] in GPT_OPENROUTER_MODELS:
+        if self.config['model'] in GOOGLE_AI_STUDIO_MODELS:
             return base * 16
         elif self.config['model'] in O_MODELS:
             # https://platform.openai.com/docs/models#o1
