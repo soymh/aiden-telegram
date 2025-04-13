@@ -640,22 +640,22 @@ class OpenAIHelper:
             common_args = {
                 'model': self.config['vision_model'],
                 'messages': self.conversations[self.chat_id][:-1] + [message],
-                'temperature': self.config['temperature'],
-                'n': 1, # several choices is not implemented yet
-                'max_tokens': self.config['vision_max_tokens'],
-                'presence_penalty': self.config['presence_penalty'],
-                'frequency_penalty': self.config['frequency_penalty'],
-                'stream': stream
+                # 'temperature': self.config['temperature'],
+                # 'n': 1, # several choices is not implemented yet
+                # 'max_tokens': self.config['vision_max_tokens'],
+                # 'presence_penalty': self.config['presence_penalty'],
+                # 'frequency_penalty': self.config['frequency_penalty'],
+                # 'stream': stream
             }
 
 
-            # vision model does not yet support functions
+            # vision model does support functions
 
-            # if self.config['enable_functions']:
-            #     functions = self.plugin_manager.get_functions_specs()
-            #     if len(functions) > 0:
-            #         common_args['functions'] = self.plugin_manager.get_functions_specs()
-            #         common_args['function_call'] = 'auto'
+            if self.config['enable_functions']:
+                functions = self.plugin_manager.get_functions_specs()
+                if len(functions) > 0:
+                    common_args['functions'] = self.plugin_manager.get_functions_specs()
+                    common_args['function_call'] = 'auto'
             
             return await self.client.chat.completions.create(**common_args)
 
