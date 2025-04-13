@@ -232,13 +232,16 @@ class OpenAIHelper:
             for index, choice in enumerate(response.choices):
                 content = choice.message.content.strip()
                 if index == 0:
-                    self.__add_to_history(self.user_id, self.username, chat_id, role="assistant", content=content)
+                    self.add_to_history(self.user_id, self.username, chat_id, role="assistant", content=content)
                 answer += f'{index + 1}\u20e3\n'
                 answer += content
                 answer += '\n\n'
         else:
-            answer = response.choices[0].message.content.strip()
-            self.__add_to_history(self.user_id, self.username, chat_id, role="assistant", content=answer)
+            if response.choices[0].message.content:
+                answer = response.choices[0].message.content.strip()
+            else:
+                answer = "None"
+            self.add_to_history(self.user_id, self.username, chat_id, role="assistant", content=answer)
 
         bot_language = self.config['bot_language']
         show_plugins_used = len(plugins_used) > 0 and self.config['show_plugins_used']
@@ -284,7 +287,7 @@ class OpenAIHelper:
                 answer += delta.content
                 yield answer, 'not_finished'
         answer = answer.strip()
-        self.__add_to_history(self.user_id, self.username, chat_id, role=role, content=answer)
+        self.add_to_history(self.user_id, self.username, chat_id, role=role, content=answer)
         tokens_used = str(self.__count_tokens(self.conversations[str(chat_id)]))
 
         show_plugins_used = len(plugins_used) > 0 and self.config['show_plugins_used']
@@ -321,7 +324,7 @@ class OpenAIHelper:
 
             self.last_updated[self.chat_id] = str(datetime.datetime.now())
 
-            self.__add_to_history(self.user_id, self.username, self.chat_id, role=role, content=query)
+            self.add_to_history(self.user_id, self.username, self.chat_id, role=role, content=query)
 
             # Summarize the chat history if it's too long to avoid excessive token usage
             # token_count = self.__count_tokens(self.conversations[self.chat_id])
@@ -334,8 +337,8 @@ class OpenAIHelper:
                     summary = await self.__summarise(self.user_id, self.username, self.conversations[self.chat_id][:-1])
                     self.logger.debug(f'Summary: {summary}')
                     self.reset_chat_history(self.user_id, self.username, self.chat_id, self.conversations[self.chat_id][0]['content'])
-                    self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=summary)
-                    self.__add_to_history(self.user_id, self.username, self.chat_id, role="user", content=query)
+                    self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=summary)
+                    self.add_to_history(self.user_id, self.username, self.chat_id, role="user", content=query)
                 except Exception as e:
                     self.logger.warning(f'Error while summarising chat history: {str(e)}. Popping elements instead...')
                     self.conversations[self.chat_id] = self.conversations[self.chat_id][-self.config['max_history_size']:]
@@ -390,7 +393,6 @@ class OpenAIHelper:
                     return response, plugins_used
         else:
             first_choice = response.choices[0]
-            self.logger.info(f"first choice is :{first_choice}")
             content = first_choice.message.content
             if len(response.choices) > 0:
                 if first_choice.message.tool_calls:
@@ -402,7 +404,7 @@ class OpenAIHelper:
                     return response, plugins_used
             else:
                 return response, plugins_used
-            self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=content, function_call={"name": function_name})
+            self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=content if content else "None", function_call={"name": function_name})
 
             
 
@@ -417,7 +419,7 @@ class OpenAIHelper:
                     arguments['group_id'] = self.group_id
                     arguments['mod_bot_token'] = self.mod_bot_token
                     arguments = json.dumps(arguments)
-                    function_response = await self.plugin_manager.call_function(function_name, self, json.dumps(arguments))
+                    function_response = await self.plugin_manager.call_function(function_name, self, arguments)
             else:
                 self.logger.info(f'The bot doesn\'t have access to built-in moderating plugin[s],aborting function call {function_name} with arguments {arguments}')
                 function_response = json.dumps({"status": "failed", "details": "You don't have access to this function. Ask the user if they want to moderate telegram ,they have to use '/moderate' command."}, default=str)
@@ -608,13 +610,13 @@ class OpenAIHelper:
 
             if self.config['enable_vision_follow_up_questions']:
                 self.conversations_vision[str(self.chat_id)] = True
-                self.__add_to_history(self.user_id, self.username, self.chat_id, role="user", content=content)
+                self.add_to_history(self.user_id, self.username, self.chat_id, role="user", content=content)
             else:
                 for message in content:
                     if message['type'] == 'text':
                         query = message['text']
                         break
-                self.__add_to_history(self.user_id, self.username, self.chat_id, role="user", content=query)
+                self.add_to_history(self.user_id, self.username, self.chat_id, role="user", content=query)
 
             # Summarize the chat history if it's too long to avoid excessive token usage
             token_count = self.__count_tokens(self.conversations[self.chat_id])
@@ -629,7 +631,7 @@ class OpenAIHelper:
                     summary = await self.__summarise(self.user_id, self.username, self.conversations[self.chat_id][:-1])
                     self.logger.debug(f'Summary: {summary}')
                     self.reset_chat_history(self.user_id, self.username, self.chat_id, self.conversations[self.chat_id][0]['content'])
-                    self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=summary)
+                    self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=summary)
                     self.conversations[self.chat_id] += [last]
                 except Exception as e:
                     self.logger.warning(f'Error while summarising chat history: {str(e)}. Popping elements instead...')
@@ -698,13 +700,13 @@ class OpenAIHelper:
             for index, choice in enumerate(response.choices):
                 content = choice.message.content.strip()
                 if index == 0:
-                    self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=content)
+                    self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=content)
                 answer += f'{index + 1}\u20e3\n'
                 answer += content
                 answer += '\n\n'
         else:
             answer = response.choices[0].message.content.strip()
-            self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=answer)
+            self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=answer)
 
         bot_language = self.config['bot_language']
         # Plugins are not enabled either
@@ -753,7 +755,7 @@ class OpenAIHelper:
                 answer += delta.content
                 yield answer, 'not_finished'
         answer = answer.strip()
-        self.__add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=answer)
+        self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=answer)
         tokens_used = str(self.__count_tokens(self.conversations[self.chat_id]))
 
         #show_plugins_used = len(plugins_used) > 0 and self.config['show_plugins_used']
@@ -802,7 +804,7 @@ class OpenAIHelper:
         self.user_update(user_id, username, chat_id)
 
         self.usage[self.user_id].do_conversations(chat_id, {"role": "function","name": function_name, "content": content})
-    def __add_to_history(self, user_id, username, chat_id, role, content, function_call=None):
+    def add_to_history(self, user_id, username, chat_id, role, content, function_call=None):
         """
         Adds a message to the conversation history.
         :param chat_id: The chat ID

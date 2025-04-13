@@ -23,8 +23,7 @@ class TelegramModerator(Plugin):
         return [{
             "name": "telegram_moderator",
             "description": (
-                "Handles a Telegram message. If the message starts with 'forward it :', the message is "
-                "forwarded to a designated channel. If it starts with 'send it :', the text is sent as a "
+                "Handles a Telegram message. If it starts with 'send it :', the text is sent as a "
                 "new message to the channel. If it starts with 'get recent', the bot retrieves recent messages."
                 "If it starts with 'close_topic', the bot closes a forum topic. If it starts with 'open_topic', "
                 "the bot opens a forum topic,etc."
@@ -42,7 +41,7 @@ class TelegramModerator(Plugin):
                         ],
                         "description": "The action to perform:"
                         "## for channel:" 
-                        "'send_to_channel' sends a new message to the channel. Distinct between this and 'send_to_topic'"
+                        "'send_to_channel' sends a new message to the CHANNEL. Distinct between this and 'send_to_topic'"
                         "'forward_to_channel' forwards a message to the channel."
                         "'send_photo_to_channel' sends a single photo to the channel."
                         "'send_video_to_channel' sends a single video to the channel."
@@ -52,9 +51,9 @@ class TelegramModerator(Plugin):
                         "'send_multiple_documents_to_channel' sends multiple documents to the channel."
                         " "
                         "## for group and its topic"
-                        "'send_to_topic' sends a new message to the topic. **Use with caution!**"
+                        "'send_to_topic' sends a new message to the topic."
                         "'get_recent_chats' retrieves recent chats. " 
-                        "'close_topic' closes a forum topic and 'open_topic' opens a forum topic. **Use with caution!**"
+                        "'close_topic' closes a forum topic and 'open_topic' opens a forum topic."
                     },
                     "message_text": {
                         "type": "string",
@@ -62,11 +61,11 @@ class TelegramModerator(Plugin):
                     },
                     "group_id": {
                         "type": "integer",
-                        "description": "The group_id. Must be provided for actions related to topics."
+                        "description": "The group_id."
                     },
                     "message_thread_id": {
                         "type": "integer",
-                        "description": "The message_thread_id of the topic to manage. Must be provided for actions related to topics."
+                        "description": "The message_thread_id of the topic to manage."
                     },
                     "message_id": {
                         "type": "integer",
@@ -82,7 +81,7 @@ class TelegramModerator(Plugin):
                         "description": "Link/file_id to a single media item."
                     }
                 },
-                "required": ["action","message_text","group_id","message_thread_id","message_id"]
+                "required": ["action","message_text"]
             }
         }]
     def check_group_id(group_id):

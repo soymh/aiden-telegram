@@ -547,8 +547,8 @@ class ChatGPTTelegramBot:
                     # Get the response of the transcript
                     response, input_tokens, output_tokens, cached_tokens  = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=transcript)
                     if is_direct_result(response):
-                        direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user.Answer to next function calls/prompts since they are different from the past ones."
-                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear."
+                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=direct_caption_prompt)
                         # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
                         # self.logger.info(f"direct caption is : {direct_caption} and direct token: {direct_tokens}")
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
@@ -805,8 +805,8 @@ class ChatGPTTelegramBot:
 
                 async for content, tokens in stream_response:
                     if is_direct_result(content):
-                        direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user.Answer to next function calls/prompts since they are different from the past ones."
-                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear."
+                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=direct_caption_prompt)
                         add_chat_request_to_usage_tracker(self.usage, self.config, update.message.from_user.id, direct_input_tokens, direct_output_tokens, direct_cached_tokens)
                         return await handle_direct_result(self.config, update, content , direct_caption)
 
@@ -882,8 +882,8 @@ class ChatGPTTelegramBot:
                     nonlocal input_tokens, output_tokens, cached_tokens
                     response, input_tokens, output_tokens, cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role=role, query=prompt, super_access=super_access)
                     if is_direct_result(response):
-                        direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear for the user.Answer to next function calls/prompts since they are different from the past ones."
-                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="system", query=direct_caption_prompt)
+                        direct_caption_prompt = "Previous Function ran successfully, Give a follow-up caption based on the previous function you called, consice and clear."
+                        direct_caption, direct_input_tokens, direct_output_tokens, direct_cached_tokens = await self.openai.get_chat_response(user_id=self.user_id, username=self.username, chat_id=chat_id, role="user", query=direct_caption_prompt)
                         # self.usage[self.user_id].add_chat_tokens(output_tokens=direct_tokens)
                         self.logger.info(f"direct output tokens are : {direct_output_tokens}, output tokens are : {output_tokens}")
                         output_tokens = int(output_tokens)
@@ -939,9 +939,10 @@ class ChatGPTTelegramBot:
 
         if prompt.lower().startswith(forward_keyword.lower()):
             if (channel_id or forward_keyword) in [""]  :
-                missing_response = "-ONLY- Tell the user the message hasn't been sent to their channel,"  
-                "because they haven't set channel_id or forward_keyword in the config."
-                await self.process_openai_response(update, context, missing_response, chat_id,role="system")
+                missing_response = "The message hasn't been sent to their channel,"  
+                "channel_id or forward_keyword in the config is missing."
+                self.openai.add_to_history(self.user_id, self.username, chat_id, "system", missing_response)
+                await self.process_openai_response(update, context, "what happended?", chat_id,role="suer")
                 return
             # Extract the part of the prompt after the forward keyword and strip spaces.
             user_input_after_keyword = prompt[len(forward_keyword):].strip()
@@ -962,8 +963,9 @@ class ChatGPTTelegramBot:
                 f"Forwarded message to the channel {channel_id}: %s", 
                 update.effective_message.reply_to_message.text
             )
-            forward_response = "-ONLY- Tell the user their message has been forwarded to their channel successfully."
-            await self.process_openai_response(update, context, forward_response, chat_id,role="system")
+            forward_response = "The message has been forwarded to the channel successfully."
+            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", forward_response)
+            await self.process_openai_response(update, context, "what happened?", chat_id,role="user")
 
         return
 
@@ -988,8 +990,8 @@ class ChatGPTTelegramBot:
         if update.effective_message.reply_to_message is None:
             prompt = prompt[len(self.config["mod_trigger_keyword"]) :].strip()
             self.logger.info(f"With the prompt: {prompt}")
-            prompt = (
-                f"User asked for :`{prompt}`. Using these information : "
+            system_prompt = (
+                f"User asked for channel/group moderation. Using these information : "
                 f"`message_thread_id={message_thread_id} group_id={group_id}`, Answer their request.NOTHING MORE!"
             )
         else:
@@ -997,20 +999,21 @@ class ChatGPTTelegramBot:
             reply = update.effective_message.reply_to_message
             if reply.text:
                 self.logger.info(f"by replying to the text: {reply.text}")
-                prompt = (
-                    f'"User replied to the text :`{reply.text}" by the prompt: {prompt}. '
+                system_prompt = (
+                    f'"User replied to the text :`{reply.text}" and asked for channel/group moderation. '
                     f"Using these information : 'replied_message_id={reply.message_id} message_thread_id={message_thread_id} and group_id={group_id}', "
                     f"Answer their request.NOTHING MORE!"
                 )
             else:
                 self.logger.info(f"by replying to a non-text message: {reply}")
-                prompt = (
-                    f'"User replied to the message :`Non-text message" by the prompt: {prompt}. '
+                system_prompt = (
+                    f'"User replied to the message :`Non-text message" and asked for channel/group moderation. '
                     f"Using these information : 'replied_message_id={reply.message_id} message_thread_id={message_thread_id} and group_id={group_id}', "
                     f"Answer their request.NOTHING MORE!"
                 )
 
-        await self.process_openai_response(update, context, prompt, chat_id, role="system", super_access=True)
+        self.openai.add_to_history(self.user_id, self.username, chat_id, "system", system_prompt)
+        await self.process_openai_response(update, context, prompt, chat_id, role="user", super_access=True)
         return
 
     async def handle_group_chat_prompt(
@@ -1098,9 +1101,10 @@ class ChatGPTTelegramBot:
             )
             new_prompt = (
                 f"User replied to a forwarded Telegram message containing the text: `{reply_text}` with extra information: {reply} "
-                f"and the prompt: {prompt}. Using these information, Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
+                f"Using these information, Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
             )
-            await self.process_openai_response(update, context, new_prompt, chat_id, role="system",super_access=super_access)
+            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
+            await self.process_openai_response(update, context, prompt, chat_id, role="user",super_access=super_access)
             return None, True
 
         # If the reply message includes api_kwargs (likely forwarded from a channel)
@@ -1119,7 +1123,8 @@ class ChatGPTTelegramBot:
                 f"and the prompt: {prompt}. Using these information and the link: Telegram_link=https://t.me/{channel_username}/{original_message_id} "
                 f"(Recommended to use your tools to get more complete info), Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
             )
-            await self.process_openai_response(update, context, new_prompt, chat_id, role="system", super_access=super_access)
+            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
+            await self.process_openai_response(update, context, prompt, chat_id, role="user", super_access=super_access)
             return None, True
 
         # Default: prepend the reply text to the prompt.
@@ -1208,8 +1213,9 @@ class ChatGPTTelegramBot:
 
             if (update.message.reply_to_message and update.message.reply_to_message.text):
                 self.logger.info(f"And replied to the message: {update.message.reply_to_message}")
-                prompt = f'"User replied to the text :`{update.message.reply_to_message.text}" by the prompt: {prompt}' + f". Using these information : 'message_thread_id={update.message.message_thread_id} and group_id={update.message.chat.id}', Answer their request.NOTHING MORE!"
-            await self.process_openai_response(update, context, prompt, chat_id,role="system",super_access=True)
+                prompt = f'"User replied to the text :`{update.message.reply_to_message.text}"' + f". Using these information : 'message_thread_id={update.message.message_thread_id} and group_id={update.message.chat.id}', Answer their request.NOTHING MORE!"
+            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
+            await self.process_openai_response(update, context, prompt, chat_id,role="user",super_access=True)
             return
 
 
