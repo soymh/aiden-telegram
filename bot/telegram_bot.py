@@ -1626,12 +1626,13 @@ class ChatGPTTelegramBot:
     async def config_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Handle configuration commands for:
-        - get:    /setconfig get <openai|telegram> <config_key> [user_id]
-        - set:    /setconfig set <openai|telegram> <config_key> <new_value> [user_id]
-        - list:   /setconfig list      (lists allowed users only)
-        - all:    /setconfig all       (lists all users with permission status)
-        - permit: /setconfig permit <user_id> <true|false>
-        - full:   /setconfig full <user_id> (returns full config for that user)
+        - get:     /setconfig get <openai|telegram> <config_key> [user_id]
+        - set:     /setconfig set <openai|telegram> <config_key> <new_value> [user_id]
+        - list:    /setconfig list      (lists allowed users only)
+        - all:     /setconfig all       (lists all users with permission status)
+        - permit:  /setconfig permit <user_id> <true|false>
+        - config:  /setconfig config <user_id> (returns full config for that user)
+        - logfile: /setconfig logfile <user_id> [n]
         """
         # Update current user data.
         await self.user_update(update, context)
@@ -1639,7 +1640,7 @@ class ChatGPTTelegramBot:
         admin_check = is_admin(self.config, user.id)
 
         # Only admins can run the following commands.
-        if not admin_check and context.args[0].lower() in ("list", "all", "permit", "full"):
+        if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") or is_forbidden(self.config,update,context) :
             if await is_allowed(self.config, update, context):
                 await self.send_disallowed_message(update, context)
             return
@@ -1653,7 +1654,7 @@ class ChatGPTTelegramBot:
                 "  To list allowed users: /setconfig list\n"
                 "  To list all users:     /setconfig all\n"
                 "  To permit/disallow a user: /setconfig permit <user_id> <true|false>\n"
-                "  To get full config:    /setconfig full <user_id>"
+                "  To get full config:    /setconfig config <user_id>"
                 "  To get [n last lines] user_log file: /setconfig logfile <user_id> [n]"
             )
             return
@@ -1700,11 +1701,14 @@ class ChatGPTTelegramBot:
             return
 
         # --- Branch: get full configuration for a specified user ---
-        if action == "full":
-            if len(context.args) < 2 or len(context.args) > 3:
-                await update.message.reply_text("Usage: /setconfig full <user_id>")
+        if action == "config":
+            if len(context.args) > 2:
+                await update.message.reply_text("Usage: /setconfig config <user_id>")
                 return
-            target_user_id = context.args[1]
+            elif len(context.args) == 1:
+                 target_user_id = user.id
+            else :
+                target_user_id = context.args[1]
             file_path = os.path.join(self.logs_dir, target_user_id, f"{target_user_id}.json")
             if not os.path.isfile(file_path):
                 await update.message.reply_text("User file not found.")
@@ -1724,15 +1728,34 @@ class ChatGPTTelegramBot:
 
 
         if action == "logfile":
-            if len(context.args) == 2:
+            if len(context.args) == 1:
                 target_user_id = user.id
+            elif len(context.args) == 2:
+                target_user_id = context.args[2]
             elif len(context.args) == 3:
-                target_user_id = context.args[1]
+                common_args = {
+                    'message_thread_id': get_thread_id(update),
+                    'reply_to_message_id': get_reply_to_message_id(self.config, update)
+                }
+                try:
+                    from collections import deque
+                    target_user_id = context.args[1]
+                    lines = int(context.args[2])
+                    user_file = os.path.join(self.logs_dir, target_user_id, f"user_{target_user_id}.log")
+                    with open(user_file, 'r') as f:
+                        logs = list(deque(f, maxlen=lines))
+                        await update.message.reply_text(logs, **common_args)
+                        return
+                except Exception as e:
+                    self.logger.info(f"Error reading config's last {lines} lines for user {target_user_id}: {e}")
+                    await update.message.reply_text(f"Error reading user config's last {lines} lines:{e}")
+                    return
+
             else:
                 await update.message.reply_text("Usage: /setconfig logfile <user_id> [n lines]")
                 return
 
-            user_file = os.path.join(self.logs_dir, target_user_id, f"user_{target_user_id}.log")
+            user_file = os.path.join(self.logs_dir, str(target_user_id), f"user_{target_user_id}.log")
             if not os.path.isfile(user_file):
                 await update.message.reply_text("User file for:{} not found.")
                 return
@@ -1745,7 +1768,7 @@ class ChatGPTTelegramBot:
                 await update.message.reply_document(**common_args, document=open(user_file, 'rb'))
             except Exception as e:
                 self.logger.info(f"Error reading config for user {target_user_id}: {e}")
-                await update.message.reply_text("Error reading user config.")
+                await update.message.reply_text(f"Error getting user config:{e}")
             return
 
         # --- Branch: get and set configuration values ---
@@ -1753,7 +1776,7 @@ class ChatGPTTelegramBot:
         # For "set": /setconfig set <openai|telegram> <config_key> <new_value> [target_user_id]
         # For "get": /setconfig get <openai|telegram> <config_key> [target_user_id]
         if action not in ("get", "set"):
-            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', 'all', 'permit', or 'full'.")
+            await update.message.reply_text("Invalid action. Use 'get', 'set', 'list', 'all', 'permit', or 'config'.")
             return
 
 
@@ -1768,7 +1791,7 @@ class ChatGPTTelegramBot:
         if action == "set":
             if len(context.args) >= 5 and context.args[-1].isdigit():
                 # Only admins can run the following commands.
-                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "full"):
+                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") and not is_forbidden(self.config,update,context):
                     if await is_allowed(self.config, update, context):
                         await self.send_disallowed_message(update, context)
                     return
@@ -1779,7 +1802,7 @@ class ChatGPTTelegramBot:
         elif action == "get":
             if len(context.args) == 4 and context.args[3].isdigit():
                 # Only admins can run the following commands.
-                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "full"):
+                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config"):
                     if await is_allowed(self.config, update, context):
                         await self.send_disallowed_message(update, context)
                     return
