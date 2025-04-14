@@ -133,7 +133,7 @@ class ChatGPTTelegramBot:
             logger.setLevel(logging.INFO)
             
             # Create a file handler for the user's log file
-            log_file_path = os.path.join(self.logs_dir, f"user_{user_id}.log")
+            log_file_path = os.path.join(self.logs_dir, str(user_id), f"user_{user_id}.log")
             handler = logging.FileHandler(log_file_path, mode='a')
             formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
             handler.setFormatter(formatter)
@@ -1545,7 +1545,7 @@ class ChatGPTTelegramBot:
                 chat_id=chat_id,
                 text="User has been approved to use the bot!\n"
             )
-            response_text = f"User {user_fullname} with username {username} \(id:{user_id_str}\) has been approved."
+            response_text = f"User {user_fullname} with username {username} (id:{user_id_str}) has been approved."
         elif action == "admin_deny":
             self.usage[user_id].update_telegram_config(True, 'is_awaiting', False)
             self.usage[user_id].update_telegram_config(True,'id_forbidden',True)
@@ -1553,7 +1553,7 @@ class ChatGPTTelegramBot:
                 chat_id=chat_id,
                 text="Sorry, you are not granted access to use the bot by the admin."
             )
-            response_text = f"User {user_fullname} with username {username} \(id:{user_id_str}\) has been denied."
+            response_text = f"User {user_fullname} with username {username} (id:{user_id_str}) has been denied."
         else:
             response_text = "Unknown action."
         self.logger.info(f"{response_text} by the admin: {self.config['admin_user_id']}")
@@ -1585,12 +1585,13 @@ class ChatGPTTelegramBot:
         header = f"{'User ID':<12} | {'Username':<20} | {'Allowed':<7}\n" + "-" * 50 + "\n"
         rows = []
         for file_name in os.listdir(self.logs_dir):
-            if file_name.endswith(".json"):
-                file_path = os.path.join(self.logs_dir, file_name)
+            user_dir = os.path.join(self.logs_dir, file_name)
+            if os.path.isdir(user_dir):
+                file_path = os.path.join(user_dir , f"{file_name}.json")
                 try:
                     with open(file_path, "r") as f:
                         data = json.load(f)
-                    user_id = file_name[:-5]  # remove ".json"
+                    user_id = file_name
                     username = data.get("username", "N/A")
                     allowed = data.get("telegram_config", {}).get("is_allowed", False)
                     rows.append(f"{user_id:<12} | {username:<20} | {str(allowed):<7}")
@@ -1601,7 +1602,7 @@ class ChatGPTTelegramBot:
 
     # Helper: update a user's permission status.
     async def update_user_permission(self, update: Update, target_user_id: str, new_status: bool) -> bool:
-        file_path = os.path.join(self.logs_dir, f"{target_user_id}.json")
+        file_path = os.path.join(self.logs_dir, target_user_id, f"{target_user_id}.json")
         if not os.path.isfile(file_path):
             await update.message.reply_text("User file not found.")
             return False
@@ -1653,6 +1654,7 @@ class ChatGPTTelegramBot:
                 "  To list all users:     /setconfig all\n"
                 "  To permit/disallow a user: /setconfig permit <user_id> <true|false>\n"
                 "  To get full config:    /setconfig full <user_id>"
+                "  To get [n last lines] user_log file: /setconfig logfile <user_id> [n]"
             )
             return
 
@@ -1662,13 +1664,14 @@ class ChatGPTTelegramBot:
         if action == "list":
             allowed_users = []
             for file_name in os.listdir(self.logs_dir):
-                if file_name.endswith(".json"):
-                    file_path = os.path.join(self.logs_dir, file_name)
+                user_dir = os.path.join(self.logs_dir, file_name)
+                if os.path.isdir(user_dir):
+                    file_path = os.path.join(user_dir, f"{file_name}.json")
                     try:
                         with open(file_path, "r") as f:
                             data = json.load(f)
                         if data.get("telegram_config", {}).get("is_allowed", False):
-                            allowed_users.append(f"{file_name[:-5]}: {data.get('username', 'N/A')}")
+                            allowed_users.append(f"{file_name}: {data.get('username', 'N/A')}")
                     except Exception as e:
                         self.logger.info(f"Error while getting allowed users list: {e}")
                         continue
@@ -1698,19 +1701,48 @@ class ChatGPTTelegramBot:
 
         # --- Branch: get full configuration for a specified user ---
         if action == "full":
-            if len(context.args) != 2:
+            if len(context.args) < 2 or len(context.args) > 3:
                 await update.message.reply_text("Usage: /setconfig full <user_id>")
                 return
             target_user_id = context.args[1]
-            file_path = os.path.join(self.logs_dir, f"{target_user_id}.json")
+            file_path = os.path.join(self.logs_dir, target_user_id, f"{target_user_id}.json")
             if not os.path.isfile(file_path):
                 await update.message.reply_text("User file not found.")
                 return
             try:
-                with open(file_path, "r") as f:
-                    data = json.load(f)
-                full_config = json.dumps(data, indent=4)
-                await update.message.reply_text(f"Full config for user {target_user_id}:\n{full_config}")
+                common_args = {
+                    'message_thread_id': get_thread_id(update),
+                    'reply_to_message_id': get_reply_to_message_id(self.config, update),
+                    'caption': f"Here is the full config for user {target_user_id}",
+                }
+                user_file = file_path
+                await update.message.reply_document(**common_args, document=open(user_file, 'rb'))
+            except Exception as e:
+                self.logger.info(f"Error reading config for user {target_user_id}: {e}")
+                await update.message.reply_text("Error reading user config.")
+            return
+
+
+        if action == "logfile":
+            if len(context.args) == 2:
+                target_user_id = user.id
+            elif len(context.args) == 3:
+                target_user_id = context.args[1]
+            else:
+                await update.message.reply_text("Usage: /setconfig logfile <user_id> [n lines]")
+                return
+
+            user_file = os.path.join(self.logs_dir, target_user_id, f"user_{target_user_id}.log")
+            if not os.path.isfile(user_file):
+                await update.message.reply_text("User file for:{} not found.")
+                return
+            try:
+                common_args = {
+                    'message_thread_id': get_thread_id(update),
+                    'reply_to_message_id': get_reply_to_message_id(self.config, update),
+                    'caption': f"Here is the full log for user {target_user_id}",
+                }
+                await update.message.reply_document(**common_args, document=open(user_file, 'rb'))
             except Exception as e:
                 self.logger.info(f"Error reading config for user {target_user_id}: {e}")
                 await update.message.reply_text("Error reading user config.")
@@ -1754,7 +1786,7 @@ class ChatGPTTelegramBot:
                 target_user_id = str(context.args[3])
         for file_name in os.listdir(self.logs_dir):
             if file_name.startswith(str(target_user_id)):
-                file_path = os.path.join(self.logs_dir, file_name)
+                file_path = os.path.join(self.logs_dir, file_name, f"{file_name}.json")
             
                 with open(file_path, "r") as f:
                     data = json.load(f)
@@ -1764,8 +1796,8 @@ class ChatGPTTelegramBot:
         self.usage[target_user_id] = UsageTracker(target_user_id, username, target_user_id)
 
         user_ids_list = [
-                    filename[:-5] for filename in os.listdir(self.logs_dir)
-                    if os.path.isfile(os.path.join(self.logs_dir, filename)) and filename.lower().endswith('.json')
+                    filename for filename in os.listdir(self.logs_dir)
+                    if os.path.isdir(os.path.join(self.logs_dir, filename))
                 ]
         # Ensure a configuration manager exists for the target user.
         if str(target_user_id) not in user_ids_list:

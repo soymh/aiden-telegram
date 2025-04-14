@@ -40,15 +40,15 @@ class UsageTracker:
         self.max_tokens_default = self.default_max_tokens(model=model) if self.default_max_tokens else 1200
         self.user_id = user_id
         self.chat_id = chat_id 
-        self.logs_dir = logs_dir
+        self.logs_dir = os.path.join(logs_dir, str(user_id))
 
         # path to usage file of given user and creation
-        self.user_file = f"{logs_dir}/{user_id}.json"
-        pathlib.Path(logs_dir).mkdir(exist_ok=True)
+        self.user_file = os.path.join(self.logs_dir, f"{self.user_id}.json")
+        pathlib.Path(self.user_file).parent.mkdir(parents=True, exist_ok=True)
 
         user_ids_list = [
-            filename[:-5] for filename in os.listdir(logs_dir)
-            if os.path.isfile(os.path.join(logs_dir, filename)) and filename.lower().endswith('.json')
+            filename for filename in os.listdir(self.logs_dir)
+            if os.path.isdir(os.path.join(self.logs_dir, filename))
         ]
         user_ids_list.append(str(self.user_id))
         self.openai_config = {
@@ -182,7 +182,7 @@ class UsageTracker:
 
         else:
             # ensure directory exists
-            pathlib.Path(logs_dir).mkdir(exist_ok=True)
+            pathlib.Path(self.logs_dir).mkdir(parents=True, exist_ok=True)
             # create new dictionary for this user
             self.usage = {
                 "username": username,

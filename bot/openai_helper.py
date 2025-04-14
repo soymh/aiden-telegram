@@ -169,7 +169,7 @@ class OpenAIHelper:
             logger.setLevel(logging.INFO)
             
             # Create a file handler for the user's log file
-            log_file_path = os.path.join(self.logs_dir, f"user_{user_id}.log")
+            log_file_path = os.path.join(self.logs_dir, str(user_id),f"user_{user_id}.log")
             handler = logging.FileHandler(log_file_path, mode='a')
             formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
             handler.setFormatter(formatter)
