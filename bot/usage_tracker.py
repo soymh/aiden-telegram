@@ -239,9 +239,10 @@ class UsageTracker:
             with open(self.user_file, "w") as outfile:
                 json.dump(self.usage, outfile, indent=4)
             return
-        try:
-            main_conversation = self.usage['conversations'][chat_id]
-        except:
+        if self.usage['conversations'].get(str(chat_id),None):
+            main_conversation = self.usage['conversations'][str(chat_id)]
+        else:
+            self.usage['conversations'][str(chat_id)] = []
             main_conversation = self.usage['conversations'][str(chat_id)]
         main_conversation = {chat_id: main_conversation}
 

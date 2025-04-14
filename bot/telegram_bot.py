@@ -97,6 +97,15 @@ class ChatGPTTelegramBot:
         self.inline_queries_cache = {}
 
         self.logger = self.create_user_logger(self.user_id)
+    def extract_chat_id(self,update):
+        if update.inline_query:
+            chat_id = update.inline_query.id
+        elif update.effective_chat:
+            chat_id = update.effective_chat.id
+        else :
+            chat_id = update.callback_query.from_user.id
+        return chat_id
+
 
     async def user_update(self, update:Update, context:ContextTypes.DEFAULT_TYPE, is_inline=False):
         """
@@ -104,12 +113,7 @@ class ChatGPTTelegramBot:
         """
 
         user = update.effective_user
-        if update.inline_query:
-            chat_id = update.inline_query.id
-        elif update.effective_chat:
-            chat_id = update.effective_chat.id
-        else :
-            chat_id = update.callback_query.from_user.id
+        chat_id = self.extract_chat_id(update)
         self.user_id = user.id
         self.logger = self.create_user_logger(self.user_id)
         self.username = user.name
@@ -1168,7 +1172,7 @@ class ChatGPTTelegramBot:
         if is_awaiting :
             return
         if not await is_allowed(self.config, update, context):
-            # self.awaiting_users.add(user.id)
+            self.logger.info(f"User:{user.name} with id:{user.id} is added to awaiting list")
             self.usage[user.id].update_telegram_config(True, 'is_awaiting', True)
             await self.send_disallowed_markup(update,context)
             return
@@ -1431,14 +1435,18 @@ class ChatGPTTelegramBot:
         """
         if await is_forbidden(self.config,update,context) or await is_allowed(self.config,update,context):
             return
-            
+        user = update.effective_user
+        fullname = str(user.full_name if user.full_name else 'N/A')
+        username = str(user.username if user.username else 'N/A')
+        user_id = str(user.id)
+        chat_id = self.extract_chat_id(update)
         join_button = InlineKeyboardButton(
             "I wanna join the Bot users!",
-            callback_data=f"join_request:{update.effective_user.id}"
+            callback_data=f"join_request:{user_id}:{username}:{fullname}:{chat_id}"
         )
         keyboard = [[join_button]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+        self.logger.info(f"User:{user.name} with id:{user.id} is not allowed to send message to the bot\n")
         if not is_inline:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
@@ -1468,28 +1476,38 @@ class ChatGPTTelegramBot:
         """
 
 
+
+        # user = update.effective_user
+       # await self.user_update(update,context)
         query = update.callback_query
         await query.answer()
-        user = update.effective_user
-        # self.awaiting_users.add(user.id)
-        self.usage[user.id].update_telegram_config(True, 'is_awaiting', True)
+        callback_data = query.data
+
+        self.logger.info(f"callback data:{callback_data}, self.user_id :{self.user_id}, self.chat_id:{self.chat_id}")
+
+        data = callback_data.split(":")
+        user_id_str = data[1]
+        username = data[2]
+        user_fullname = data[3]
+        chat_id = data[4]
+        # self.usage[self.user_id].update_telegram_config(True, 'is_awaiting', True)
         user_info = (
             f"Join request from:\n"
-            f"Name: {user.full_name}\n"
-            f"Username: @{user.username if user.username else 'N/A'}\n"
-            f"User ID: {user.id}"
+            f"Name: {user_fullname}\n"
+            f"Username: @{username}\n"
+            f"User ID: {user_id_str}"
         )
         
         approve_button = InlineKeyboardButton(
             "Approve",
-            callback_data=f"admin_approve:{user.id}"
+            callback_data=f"admin_approve:{user_id_str}:{username}:{user_fullname}:{chat_id}"
         )
         deny_button = InlineKeyboardButton(
             "Deny",
-            callback_data=f"admin_deny:{user.id}"
+            callback_data=f"admin_deny:{user_id_str}:{username}:{user_fullname}"
         )
         admin_keyboard = InlineKeyboardMarkup([[approve_button, deny_button]])
-        
+        self.logger.info(f"User {user_fullname}:{username} with id:{user_id_str} requested for admin approval.")
         await context.bot.send_message(
             chat_id=self.config['admin_user_id'],
             text=user_info,
@@ -1505,35 +1523,40 @@ class ChatGPTTelegramBot:
         """
 
         query = update.callback_query
-        user = update.effective_user
         await query.answer()
         callback_data = query.data  # Expected format: "admin_approve:<user_id>" or "admin_deny:<user_id>"
 
-        logging.info(f"callback data:{callback_data}, self.user_id :{self.user_id}, self.chat_id:{self.chat_id}")
+        # logging.info(f"callback data:{callback_data}, self.user_id :{self.user_id}, self.chat_id:{self.chat_id}")
 
-        action, user_id_str = callback_data.split(":")
+        data = callback_data.split(":")
+        action = data[0]
+        user_id_str = data[1]
+        username = data[2]
+        user_fullname = data[3]
+        chat_id = data[4]
+        self.logger.info(f"action,userid,username:{action}, {user_id_str}, {username}")
         user_id = int(user_id_str)
         
         if action == "admin_approve":
-            self.usage[self.user_id] = UsageTracker(self.user_id, user.username, self.chat_id)
-            # self.awaiting_users.remove(self.user_id)
-            self.usage[self.user_id].update_telegram_config(True,'is_awaiting',False)
-            self.usage[self.user_id].update_telegram_config(True,'is_allowed',True)
+            self.usage[user_id] = UsageTracker(user_id, username, self.chat_id)
+            self.usage[user_id].update_telegram_config(True,'is_awaiting',False)
+            self.usage[user_id].update_telegram_config(True,'is_allowed',True)
             await context.bot.send_message(
-                chat_id=self.chat_id,
-                text="You have been approved to use the bot!\n"
+                chat_id=chat_id,
+                text="User has been approved to use the bot!\n"
             )
-            response_text = f"User {self.user_id} has been approved."
+            response_text = f"User {user_fullname} with username {username} \(id:{user_id_str}\) has been approved."
         elif action == "admin_deny":
-            self.usage[user_id_str].update_telegram_config(True, 'is_awaiting', False)
-            self.usage[self.user_id].update_telegram_config(True,'id_forbidden',True)
+            self.usage[user_id].update_telegram_config(True, 'is_awaiting', False)
+            self.usage[user_id].update_telegram_config(True,'id_forbidden',True)
             await context.bot.send_message(
-                chat_id=self.chat_id,
+                chat_id=chat_id,
                 text="Sorry, you are not granted access to use the bot by the admin."
             )
-            response_text = f"User {self.user_id} has been denied."
+            response_text = f"User {user_fullname} with username {username} \(id:{user_id_str}\) has been denied."
         else:
             response_text = "Unknown action."
+        self.logger.info(f"{response_text} by the admin: {self.config['admin_user_id']}")
         
         await query.edit_message_text(response_text)
 
@@ -1823,9 +1846,9 @@ class ChatGPTTelegramBot:
         
 
 
-        application.add_handler(CallbackQueryHandler(self.join_request_callback, pattern=r"^join_request:\d+$"))
+        application.add_handler(CallbackQueryHandler(self.join_request_callback, pattern=r"^join_request:[0-9-]+:[a-zA-Z_]+:.+:[0-9-]+$"))
 
-        application.add_handler(CallbackQueryHandler(self.admin_response_callback, pattern=r"^admin_(approve|deny):\d+$"))
+        application.add_handler(CallbackQueryHandler(self.admin_response_callback, pattern=r"^admin_(approve|deny):[0-9-]+:[a-zA-Z_]+:.+:[0-9-]+$"))
 
         application.add_handler(CallbackQueryHandler(self.handle_callback_inline_query,pattern=r"^gpt:"))
 
