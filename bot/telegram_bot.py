@@ -1640,7 +1640,7 @@ class ChatGPTTelegramBot:
         admin_check = is_admin(self.config, user.id)
 
         # Only admins can run the following commands.
-        if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") or is_forbidden(self.config,update,context) :
+        if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") or await is_forbidden(self.config,update,context) :
             if await is_allowed(self.config, update, context):
                 await self.send_disallowed_message(update, context)
             return
@@ -1791,7 +1791,7 @@ class ChatGPTTelegramBot:
         if action == "set":
             if len(context.args) >= 5 and context.args[-1].isdigit():
                 # Only admins can run the following commands.
-                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") and not is_forbidden(self.config,update,context):
+                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") and not await is_forbidden(self.config,update,context):
                     if await is_allowed(self.config, update, context):
                         await self.send_disallowed_message(update, context)
                     return
