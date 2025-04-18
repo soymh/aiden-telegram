@@ -1640,7 +1640,7 @@ class ChatGPTTelegramBot:
         admin_check = is_admin(self.config, user.id)
 
         # Only admins can run the following commands.
-        if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") or await is_forbidden(self.config,update,context) :
+        if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config", "logfile") or await is_forbidden(self.config,update,context) :
             if await is_allowed(self.config, update, context):
                 await self.send_disallowed_message(update, context)
             return
@@ -1663,6 +1663,10 @@ class ChatGPTTelegramBot:
 
         # --- Branch: list allowed users ---
         if action == "list":
+            if not admin_check :
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             allowed_users = []
             for file_name in os.listdir(self.logs_dir):
                 user_dir = os.path.join(self.logs_dir, file_name)
@@ -1682,12 +1686,20 @@ class ChatGPTTelegramBot:
 
         # --- Branch: list all users ---
         if action == "all":
+            if not admin_check :
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             table = self.get_all_users_table()
             await update.message.reply_text(table)
             return
 
         # --- Branch: permit/disallow a user ---
         if action == "permit":
+            if not admin_check :
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             if len(context.args) != 3:
                 await update.message.reply_text("Usage: /setconfig permit <user_id> <true|false>")
                 return
@@ -1702,6 +1714,10 @@ class ChatGPTTelegramBot:
 
         # --- Branch: get full configuration for a specified user ---
         if action == "config":
+            if not admin_check :
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             if len(context.args) > 2:
                 await update.message.reply_text("Usage: /setconfig config <user_id>")
                 return
@@ -1728,6 +1744,10 @@ class ChatGPTTelegramBot:
 
 
         if action == "logfile":
+            if not admin_check :
+                if await is_allowed(self.config, update, context):
+                    await self.send_disallowed_message(update, context)
+                return
             if len(context.args) == 1:
                 target_user_id = user.id
             elif len(context.args) == 2:
@@ -1791,7 +1811,7 @@ class ChatGPTTelegramBot:
         if action == "set":
             if len(context.args) >= 5 and context.args[-1].isdigit():
                 # Only admins can run the following commands.
-                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config") and not await is_forbidden(self.config,update,context):
+                if not admin_check :
                     if await is_allowed(self.config, update, context):
                         await self.send_disallowed_message(update, context)
                     return
@@ -1802,7 +1822,7 @@ class ChatGPTTelegramBot:
         elif action == "get":
             if len(context.args) == 4 and context.args[3].isdigit():
                 # Only admins can run the following commands.
-                if not admin_check and context.args[0].lower() in ("list", "all", "permit", "config"):
+                if not admin_check :
                     if await is_allowed(self.config, update, context):
                         await self.send_disallowed_message(update, context)
                     return
