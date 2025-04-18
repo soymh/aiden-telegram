@@ -158,7 +158,10 @@ class OpenAIHelper:
         self.conversations_vision = self.usage[self.user_id].do_vision_conversations()
         self.last_updated = self.usage[self.user_id].do_last_updated()
 
-        # self.config = self.usage[self.user_id].return_configs('openai')
+        http_client = httpx.AsyncClient(proxy=self.config['proxy']) if 'proxy' in self.config else None
+        self.client = openai.AsyncOpenAI(api_key=self.config['api_key'], http_client=http_client)
+
+        self.media_client = openai.AsyncOpenAI(api_key=self.config['openai_media_api_key'],base_url=self.config['openai_media_base_url'], http_client=http_client)
 
     def create_user_logger(self, user_id):
         # Create a logger for the user if it doesn't exist
