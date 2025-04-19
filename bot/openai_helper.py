@@ -350,7 +350,7 @@ class OpenAIHelper:
             common_args = {
                 'model': self.config['model'] if not self.conversations_vision[str(self.chat_id)] else self.config['vision_model'],
                 'messages': self.conversations[self.chat_id],
-                # 'temperature': self.config['temperature'],
+                'temperature': self.config['temperature'],
                 # 'n': self.config['n_choices'],
                 # max_tokens_str: self.config['max_tokens'],
                 # 'presence_penalty': self.config['presence_penalty'],

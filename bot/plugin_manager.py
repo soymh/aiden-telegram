@@ -20,7 +20,6 @@ from plugins.web_extract import WebContentScraperPlugin
 from plugins.arxiv_search import ArXivSearchPlugin
 from plugins.telegram_extract import TelegramScraperPlugin
 from plugins.arxiv_extract import ArxivContentScraperPlugin
-from plugins.wikipedia_search import WikipediaSearchPlugin
 from plugins.image_gen import ImageGeneratorPlugin
 from plugins.reddit_helper import RedditHelper
 
@@ -53,7 +52,6 @@ class PluginManager:
             'arxiv_search': ArXivSearchPlugin,
             'telegram_extract': TelegramScraperPlugin,
             'arxiv_extract': ArxivContentScraperPlugin,
-            'wikipedia_search': WikipediaSearchPlugin,
             'image_gen': ImageGeneratorPlugin,
             'reddit_helper': RedditHelper
         }
