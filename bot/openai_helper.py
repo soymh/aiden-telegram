@@ -23,7 +23,7 @@ import requests
 from usage_tracker import UsageTracker
 
 from gpt_all_models import GPT_ALL_MODELS, GPT_3_MODELS, GPT_3_16K_MODELS,\
-    GPT_4_MODELS, GPT_4_32K_MODELS, GPT_4_VISION_MODELS, \
+    GPT_4_MODELS, GPT_4_32K_MODELS, VISION_MODELS, \
     GPT_4_128K_MODELS, GPT_4O_MODELS, O_MODELS, \
     GOOGLE_AI_STUDIO_MODELS
 
@@ -48,7 +48,7 @@ def default_max_tokens(model: str) -> int:
         return base * 4
     elif model in GPT_4_32K_MODELS:
         return base * 8
-    elif model in GPT_4_VISION_MODELS:
+    elif model in VISION_MODELS:
         return 4096
     elif model in GPT_4_128K_MODELS:
         return 4096
@@ -95,7 +95,7 @@ with open(translations_file_path, 'r', encoding='utf-8') as f:
 #             # return key as text
 #             return key
 
-model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini-2024-07-18')
+model = os.environ.get('OPENAI_MODEL', 'gemini-2.0-flash')
 functions_available = are_functions_available(model=model)
 max_tokens_default = default_max_tokens(model=model)
 
@@ -602,7 +602,7 @@ class OpenAIHelper:
         :param query: The query to send to the model
         :return: The answer from the model and the number of tokens used
         """
-        self.user_update(user_id,username)
+        self.user_update(user_id,username,chat_id)
 
         bot_language = self.config['bot_language']
         try:
@@ -659,8 +659,8 @@ class OpenAIHelper:
             if self.config['enable_functions']:
                 functions = self.plugin_manager.get_functions_specs()
                 if len(functions) > 0:
-                    common_args['functions'] = self.plugin_manager.get_functions_specs()
-                    common_args['function_call'] = 'auto'
+                    common_args['tools'] = self.plugin_manager.get_functions_specs()
+                    common_args['tool_choice'] = 'auto'
             
             return await self.client.chat.completions.create(**common_args)
 
@@ -849,7 +849,7 @@ class OpenAIHelper:
             return base * 2
         if self.config['model'] in GPT_4_32K_MODELS:
             return base * 8
-        if self.config['model'] in GPT_4_VISION_MODELS:
+        if self.config['model'] in VISION_MODELS:
             return base * 31
         if self.config['model'] in GPT_4_128K_MODELS:
             return base * 31
@@ -920,7 +920,7 @@ class OpenAIHelper:
         image_file = io.BytesIO(image_bytes)
         image = Image.open(image_file)
         model = self.config['vision_model']
-        if model not in GPT_4_VISION_MODELS:
+        if model not in VISION_MODELS:
             raise NotImplementedError(f"""count_tokens_vision() is not implemented for model {model}.""")
         
         w, h = image.size

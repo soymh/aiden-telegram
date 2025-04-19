@@ -21,7 +21,7 @@ class TranslationHelper:
             api_key=os.environ.get('OPENAI_API_KEY'),
             # http_client=http_client
         )
-        self.model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+        self.model = os.environ.get('OPENAI_MODEL', 'gemini-2.0-flash')
 
     async def translate_text(self, text: str, target_language: str) -> str:
         try:

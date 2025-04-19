@@ -14,7 +14,7 @@ def year_month(date_str):
     # extract string of year-month from date, eg: '2023-03'
     return str(date_str)[:7]
 
-model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini-2024-07-18')
+model = os.environ.get('OPENAI_MODEL', 'gemini-2.0-flash')
 
 
 class UsageTracker:
@@ -79,7 +79,7 @@ class UsageTracker:
             'image_style': os.environ.get('IMAGE_STYLE', 'vivid'),
             'image_size': os.environ.get('IMAGE_SIZE', '1024x1024'),
             'flux_base_url': os.environ.get('FLUX_BASE_URL', 'https://api.together.xyz/v1'),
-            'vision_model': os.environ.get('VISION_MODEL', 'gpt-4o-mini-2024-07-18'),
+            'vision_model': os.environ.get('VISION_MODEL', 'gemini-2.0-flash'),
             'vision_prompt': os.environ.get('VISION_PROMPT', 'What is in this image'),
             'vision_detail': os.environ.get('VISION_DETAIL', 'auto'),
             'vision_max_tokens': int(os.environ.get('VISION_MAX_TOKENS', '300')),
