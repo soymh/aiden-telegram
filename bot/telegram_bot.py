@@ -115,10 +115,10 @@ class ChatGPTTelegramBot:
         user = update.effective_user
         chat_id = self.extract_chat_id(update)
         self.user_id = user.id
-        self.logger = self.create_user_logger(self.user_id)
         self.username = user.name
         self.chat_id = chat_id
         self.usage[self.user_id] = UsageTracker(self.user_id , self.username, self.chat_id)
+        self.logger = self.create_user_logger(self.user_id)
         self.config = self.usage[self.user_id].return_configs('telegram')
         self.usage[self.user_id].save_state()
         self.conversations = self.usage[self.user_id].do_conversations(chat_id=chat_id)
@@ -613,7 +613,7 @@ class ChatGPTTelegramBot:
             else:
                 gp_trigger_keyword = self.config['group_trigger_keyword']
                 if (prompt is None and gp_trigger_keyword != '') or \
-                   (prompt is not None and not prompt.lower().startsWith(gp_trigger_keyword.lower())):
+                   (prompt is not None and not prompt.lower().startswith(gp_trigger_keyword.lower())):
                     self.logger.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
         
