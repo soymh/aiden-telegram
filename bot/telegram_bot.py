@@ -613,7 +613,7 @@ class ChatGPTTelegramBot:
             else:
                 gp_trigger_keyword = self.config['group_trigger_keyword']
                 if (prompt is None and gp_trigger_keyword != '') or \
-                   (prompt is not None and not prompt.lower().startswith(gp_trigger_keyword.lower())):
+                   (prompt is not None and not prompt.lower().startsWith(gp_trigger_keyword.lower())):
                     self.logger.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
         
@@ -1878,6 +1878,92 @@ class ChatGPTTelegramBot:
             else:
                 await update.message.reply_text("Invalid config type. Use either 'openai' or 'telegram'.")
 
+    async def broadcast_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Sends a broadcast message to all users who have folders in user_logs directory.
+        Only accessible by admin users. Requires text confirmation.
+        """
+        await self.user_update(update, context)
+        if not is_admin(self.config, update.message.from_user.id):
+            await self.send_disallowed_message(update, context)
+            return
+
+        message_to_broadcast = message_text(update.message)
+        if not message_to_broadcast:
+            await update.message.reply_text("Please provide a message to broadcast after the /broadcast command.")
+            return
+
+        # Count potential recipients
+        recipient_count = sum(1 for user_id in os.listdir(self.logs_dir) if os.path.isdir(os.path.join(self.logs_dir, user_id)))
+        
+        # Store the pending broadcast in the user's data file
+        broadcast_id = str(uuid4())
+        self.usage[self.user_id].add_pending_broadcast(broadcast_id, message_to_broadcast, recipient_count)
+
+        # Create confirmation message with preview
+        confirmation_text = (
+            f"📢 Broadcast Preview:\n\n"
+            f"{message_to_broadcast}\n\n"
+            f"This message will be sent to {recipient_count} users.\n\n"
+            f"To confirm, reply with: CONFIRM-{broadcast_id}\n"
+            f"To cancel, reply with: CANCEL-{broadcast_id}\n\n"
+            f"This confirmation request will expire in 5 minutes."
+        )
+
+        await update.message.reply_text(confirmation_text)
+
+    async def handle_broadcast_confirmation(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        """Process text-based broadcast confirmations."""
+        await self.user_update(update, context)
+        
+        if not update.message or not update.message.text:
+            return False
+            
+        message_text = update.message.text
+        if not message_text.startswith(('CONFIRM-', 'CANCEL-')):
+            return False
+            
+        if not is_admin(self.config, update.message.from_user.id):
+            await self.send_disallowed_message(update, context)
+            return True
+
+        # Split only on the first occurrence of '-'
+        broadcast_id = message_text.split('-', 1)[1]
+        
+        broadcast_data = self.usage[self.user_id].get_pending_broadcast(broadcast_id)
+        if not broadcast_data:
+            await update.message.reply_text("This broadcast confirmation code is invalid or has expired.")
+            return True
+
+        if message_text.startswith('CANCEL-'):
+            self.usage[self.user_id].remove_pending_broadcast(broadcast_id)
+            await update.message.reply_text("Broadcast cancelled.")
+            return True
+            
+        if message_text.startswith('CONFIRM-'):
+            message_to_broadcast = broadcast_data['message']
+            success_count = 0
+            fail_count = 0
+            
+            for user_id in os.listdir(self.logs_dir):
+                if os.path.isdir(os.path.join(self.logs_dir, user_id)):
+                    try:
+                        await context.bot.send_message(
+                            chat_id=int(user_id),
+                            text=f"📢 Broadcast from admin:\n\n{message_to_broadcast}"
+                        )
+                        success_count += 1
+                    except Exception as e:
+                        self.logger.error(f"Failed to send broadcast to user {user_id}: {str(e)}")
+                        fail_count += 1
+            
+            self.usage[self.user_id].remove_pending_broadcast(broadcast_id)
+            summary = f"Broadcast completed:\n✅ Successful: {success_count}\n❌ Failed: {fail_count}"
+            await update.message.reply_text(summary)
+            return True
+            
+        return False
+
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
@@ -1897,6 +1983,12 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler('start', self.help))
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('resend', self.resend))
+        application.add_handler(CommandHandler('broadcast', self.broadcast_message, filters=filters.ChatType.PRIVATE))
+        # Add message handler for broadcast confirmations before the general message handler
+        application.add_handler(MessageHandler(
+            filters.TEXT & filters.Regex(r'^(CONFIRM|CANCEL)-[a-f0-9-]+$'),
+            self.handle_broadcast_confirmation
+        ))
         application.add_handler(CommandHandler(
             'chat', self.prompt, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP)
         )

@@ -178,6 +178,8 @@ class UsageTracker:
                 self.usage['usage_history'][str(today)]['tts_characters'] = {}
             if 'vision_tokens' not in self.usage['usage_history'][str(today)]:
                 self.usage['usage_history'][str(today)]['vision_tokens'] = int()
+            if 'pending_broadcasts' not in self.usage : 
+                self.usage["pending_broadcasts"] = {}
 
 
         else:
@@ -202,6 +204,7 @@ class UsageTracker:
                 "conversations": self.conversations,
                 "vision_conversations": self.conversations_vision,
                 "last_updated": self.last_updated,
+                "pending_broadcasts": {}  # New field for storing broadcast data
             }
 
         self.openai_keys = {key for key in self.openai_config.keys()}
@@ -813,3 +816,49 @@ class UsageTracker:
 
         all_time_cost = tokens_cost + transcription_cost + image_cost + vision_cost + tts_cost
         return all_time_cost
+
+    def add_pending_broadcast(self, broadcast_id: str, message: str, recipient_count: int):
+        """
+        Adds a pending broadcast to the user's data.
+        
+        :param broadcast_id: Unique identifier for the broadcast
+        :param message: The message to be broadcast
+        :param recipient_count: Number of recipients
+        """
+        now = datetime.now()
+        self.usage['pending_broadcasts'][broadcast_id] = {
+            'message': message,
+            'recipient_count': recipient_count,
+            'timestamp': now.timestamp()
+        }
+        self.save_state()
+
+    def get_pending_broadcast(self, broadcast_id: str):
+        """
+        Retrieves a pending broadcast from the user's data.
+        
+        :param broadcast_id: The ID of the broadcast to retrieve
+        :return: Broadcast data if found and not expired, None otherwise
+        """
+        if broadcast_id not in self.usage['pending_broadcasts']:
+            return None
+            
+        broadcast_data = self.usage['pending_broadcasts'][broadcast_id]
+        now = datetime.now()
+        
+        # Check if broadcast has expired (5 minutes)
+        if now.timestamp() - broadcast_data['timestamp'] > 300:
+            self.remove_pending_broadcast(broadcast_id)
+            return None
+            
+        return broadcast_data
+
+    def remove_pending_broadcast(self, broadcast_id: str):
+        """
+        Removes a pending broadcast from the user's data.
+        
+        :param broadcast_id: The ID of the broadcast to remove
+        """
+        if broadcast_id in self.usage['pending_broadcasts']:
+            del self.usage['pending_broadcasts'][broadcast_id]
+            self.save_state()
