@@ -2013,9 +2013,9 @@ class ChatGPTTelegramBot:
         
 
 
-        application.add_handler(CallbackQueryHandler(self.join_request_callback, pattern=r"^join_request:[0-9-]+:[a-zA-Z_]+:.+:[0-9-]+$"))
+        application.add_handler(CallbackQueryHandler(self.join_request_callback, pattern=r"^join_request:[0-9-]+:[0-9a-zA-Z_]+:.+:[0-9-]+$"))
 
-        application.add_handler(CallbackQueryHandler(self.admin_response_callback, pattern=r"^admin_(approve|deny):[0-9-]+:[a-zA-Z_]+:.+:[0-9-]+$"))
+        application.add_handler(CallbackQueryHandler(self.admin_response_callback, pattern=r"^admin_(approve|deny):[0-9-]+:[0-9a-zA-Z_]+:.+:[0-9-]+$"))
 
         application.add_handler(CallbackQueryHandler(self.handle_callback_inline_query,pattern=r"^gpt:"))
 
