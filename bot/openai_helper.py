@@ -124,6 +124,18 @@ class OpenAIHelper:
 
         self.media_client = openai.AsyncOpenAI(api_key=self.config['openai_media_api_key'],base_url=self.config['openai_media_base_url'], http_client=http_client)
 
+        # Initialize KokoroTTS client if base URL is provided
+        kokoro_base_url = os.environ.get('KOKORO_TTS_BASE_URL')
+        kokoro_api_key = os.environ.get('KOKORO_TTS_API_KEY')
+        if kokoro_base_url:
+            self.kokoro_client = openai.AsyncOpenAI(
+                api_key=kokoro_api_key if kokoro_api_key else self.config['api_key'],
+                base_url=kokoro_base_url,
+                http_client=http_client
+            )
+        else:
+            self.kokoro_client = None
+
         self.plugin_manager = plugin_manager
         self.conversations: dict[int: list] = {}
         self.conversations_vision: dict[int: bool] = {}
@@ -162,6 +174,18 @@ class OpenAIHelper:
         self.client = openai.AsyncOpenAI(api_key=self.config['api_key'], http_client=http_client)
 
         self.media_client = openai.AsyncOpenAI(api_key=self.config['openai_media_api_key'],base_url=self.config['openai_media_base_url'], http_client=http_client)
+
+        # Re-initialize KokoroTTS client if base URL is provided
+        kokoro_base_url = os.environ.get('KOKORO_TTS_BASE_URL')
+        kokoro_api_key = os.environ.get('KOKORO_TTS_API_KEY')
+        if kokoro_base_url:
+            self.kokoro_client = openai.AsyncOpenAI(
+                api_key=kokoro_api_key if kokoro_api_key else self.config['api_key'],
+                base_url=kokoro_base_url,
+                http_client=http_client
+            )
+        else:
+            self.kokoro_client = None
 
     def create_user_logger(self, user_id):
         # Create a logger for the user if it doesn't exist
@@ -490,7 +514,6 @@ class OpenAIHelper:
         # self.user_update(user_id,username)
 
         bot_language = self.config['bot_language']
-        flux_base_url = self.config['flux_base_url']
         try:
             # Parse the image_size string to extract width and height
             image_size_parts = self.config['image_size'].split('x')
@@ -500,26 +523,26 @@ class OpenAIHelper:
             else:
                 raise ValueError("Invalid image_size format. Expected format: 'widthxheight'.")
 
-            # Prepare the request payload
+            # Prepare the request payload using dedicated Flux configuration
             payload = {
-                "model": self.config['image_model'],
+                "model": self.config['flux_image_model'],
                 "prompt": prompt,
                 "width": image_width,
                 "height": image_height,
-                "steps": 24,
+                "steps": 4,
                 "n": 1,
                 "response_format": "b64_json"
             }
 
-            # Set the headers
+            # Use dedicated Flux configuration
             headers = {
-                "Authorization": f"Bearer {self.config['api_key']}",
+                "Authorization": f"Bearer {self.config['flux_api_key']}",
                 "Content-Type": "application/json"
             }
 
             # Make the POST request
             response = requests.post(
-                flux_base_url,
+                self.config['flux_base_url'],
                 headers=headers,
                 data=json.dumps(payload)
             )
@@ -549,7 +572,6 @@ class OpenAIHelper:
         except Exception as e:
             raise Exception(f"⚠️ _{self.localized_text('error', bot_language)}._ ⚠️\n{str(e)}") from e
 
-
     async def generate_speech(self, text: str) -> tuple[any, int]:
         """
         Generates an audio from the given text using TTS model.
@@ -570,6 +592,40 @@ class OpenAIHelper:
             temp_file = io.BytesIO()
             temp_file.write(response.read())
             temp_file.seek(0)
+            return temp_file, len(text)
+        except Exception as e:
+            raise Exception(f"⚠️ _{self.localized_text('error', bot_language)}._ ⚠️\n{str(e)}") from e
+
+    async def generate_kokoro_speech(self, text: str, voice: str = None) -> tuple[any, int]:
+        """
+        Generates an audio from the given text using KokoroTTS model.
+        :param text: The text to convert to speech
+        :param voice: Optional voice override. If not provided, uses the configured voice
+        :return: The audio in bytes and the text size
+        """
+        bot_language = self.config['bot_language']
+        try:
+            if not self.kokoro_client:
+                raise Exception("KokoroTTS base URL not configured. Please set KOKORO_TTS_BASE_URL in your environment.")
+
+            # Use configured values from usage tracker
+            kokoro_model = self.config['kokoro_tts_model']
+            kokoro_voice = voice if voice else self.config['kokoro_tts_voice']
+
+            response = await self.kokoro_client.audio.speech.create(
+                model=kokoro_model,
+                voice=kokoro_voice,
+                input=text,
+                response_format='opus'
+            )
+
+            temp_file = io.BytesIO()
+            temp_file.write(response.read())
+            temp_file.seek(0)
+
+            # Track usage
+            self.usage[self.user_id].add_kokoro_tts_request(len(text), kokoro_model)
+
             return temp_file, len(text)
         except Exception as e:
             raise Exception(f"⚠️ _{self.localized_text('error', bot_language)}._ ⚠️\n{str(e)}") from e

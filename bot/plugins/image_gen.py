@@ -81,7 +81,7 @@ class ImageGeneratorPlugin(Plugin):
         Generates an image from the given prompt using FLUX model.
         """
         try:
-            b64_json, image_size = await helper.generate_image_flux(user_id=None, username=None, chat_id=None, prompt=prompt)
+            b64_json, image_size = await helper.generate_image_flux(user_id=None, username=None, prompt=prompt)
 
 
             # Decode Base64 and save as image
