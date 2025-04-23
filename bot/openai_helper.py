@@ -616,7 +616,7 @@ class OpenAIHelper:
                 model=kokoro_model,
                 voice=kokoro_voice,
                 input=text,
-                response_format='opus'
+                response_format='mp3'
             )
 
             temp_file = io.BytesIO()

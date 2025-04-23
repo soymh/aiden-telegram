@@ -91,7 +91,7 @@ class UsageTracker:
             # Text-to-Speech (TTS) Configuration
             'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
             'tts_voice': os.environ.get('TTS_VOICE', 'alloy'),
-            'kokoro_tts_model': os.environ.get('KOKORO_TTS_MODEL', 'kokoro-tts'),
+            'kokoro_tts_model': os.environ.get('KOKORO_TTS_MODEL', 'model_q8f16'),
             'kokoro_tts_voice': os.environ.get('KOKORO_TTS_VOICE', 'voice1'),
             'kokoro_tts_base_url': os.environ.get('KOKORO_TTS_BASE_URL', ''),
             'kokoro_tts_api_key': os.environ.get('KOKORO_TTS_API_KEY', None),
