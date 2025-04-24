@@ -575,11 +575,9 @@ class OpenAIHelper:
     async def generate_speech(self, text: str) -> tuple[any, int]:
         """
         Generates an audio from the given text using TTS model.
-        :param prompt: The text to send to the model
+        :param text: The text to convert to speech
         :return: The audio in bytes and the text size
         """
-        # self.user_update(user_id,username)
-
         bot_language = self.config['bot_language']
         try:
             response = await self.media_client.audio.speech.create(
@@ -592,11 +590,19 @@ class OpenAIHelper:
             temp_file = io.BytesIO()
             temp_file.write(response.read())
             temp_file.seek(0)
+
+            # Track TTS usage
+            self.usage[self.user_id].add_tts_request(
+                len(text), 
+                self.config['tts_model'],
+                self.usage[self.user_id].return_configs('telegram')['tts_prices']
+            )
+
             return temp_file, len(text)
         except Exception as e:
             raise Exception(f"⚠️ _{self.localized_text('error', bot_language)}._ ⚠️\n{str(e)}") from e
 
-    async def generate_kokoro_speech(self, text: str, voice: str = None) -> tuple[any, int]:
+    async def generate_kokoro_speech(self, text: str) -> tuple[any, int]:
         """
         Generates an audio from the given text using KokoroTTS model.
         :param text: The text to convert to speech
@@ -610,7 +616,7 @@ class OpenAIHelper:
 
             # Use configured values from usage tracker
             kokoro_model = self.config['kokoro_tts_model']
-            kokoro_voice = voice if voice else self.config['kokoro_tts_voice']
+            kokoro_voice = self.config['kokoro_tts_voice']
 
             response = await self.kokoro_client.audio.speech.create(
                 model=kokoro_model,

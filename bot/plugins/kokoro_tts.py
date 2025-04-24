@@ -20,12 +20,7 @@ class KokoroTTSPlugin(Plugin):
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "The text to convert to speech."},
-                    "voice": {
-                        "type": "string",
-                        "description": "The voice style to use for speech generation.",
-                        "enum": ["voice1", "voice2", "voice3"]  # Update with actual voice options
-                    }
+                    "text": {"type": "string", "description": "The text to convert to speech."}
                 },
                 "required": ["text"],
             },

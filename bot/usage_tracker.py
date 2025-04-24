@@ -145,6 +145,7 @@ class UsageTracker:
             'vision_token_price': float(os.environ.get('VISION_TOKEN_PRICE', '0.01')),
             'tts_model': os.environ.get('TTS_MODEL', 'tts-1'),
             'tts_prices': [float(i) for i in os.environ.get('TTS_PRICES', "0.015,0.030").split(",")],
+            'kokoro_tts_price': float(os.environ.get('KOKORO_TTS_PRICE', '0.015')),
             
             # Proxy Settings
             'stream': os.environ.get('STREAM', 'true').lower() == 'true',
@@ -629,7 +630,7 @@ class UsageTracker:
             self.usage['usage_history'][str(today)]['tts_characters'] = {}
         
         if tts_model not in self.usage['usage_history'][str(today)]['tts_characters']:
-            self.usage['usage_history'][str(today)]['tts_characters'][tts_model] = {}
+            self.usage['usage_history'][str(today)]['tts_characters'][tts_model] = 0
 
         # update usage_history
         if tts_model in self.usage["usage_history"][str(today)]["tts_characters"]:
@@ -807,16 +808,12 @@ class UsageTracker:
     def initialize_all_time_cost(self, minute_price=0.006):
         """Get total USD amount of all requests in history
         
-        :param tokens_price: price per 1000 tokens, defaults to 0.002
-        :param image_prices: prices for images of sizes ["256x256", "512x512", "1024x1024"],
-            defaults to [0.016, 0.018, 0.02]
         :param minute_price: price per minute transcription, defaults to 0.006
-        :param vision_token_price: price per 1K vision token interpretation, defaults to 0.01
-        :param tts_prices: price per 1K characters tts per model ['tts-1', 'tts-1-hd'], defaults to [0.015, 0.030]
         :return: total cost of all requests
         """
         usage_history = self.usage['usage_history']
 
+        # Calculate token costs
         total_input_tokens = sum(
             day_data['chat_tokens']['input_token_count'] for day_data in usage_history.values()
         )
@@ -827,7 +824,6 @@ class UsageTracker:
             day_data['chat_tokens']['cached_token_count'] for day_data in usage_history.values()
         )
 
-
         input_tokens_price = self.usage['telegram_config']['input_token_price']
         output_token_price = self.usage['telegram_config']['output_token_price']
         cached_token_price = self.usage['telegram_config']['cached_token_price']
@@ -837,12 +833,10 @@ class UsageTracker:
         output_tokens_cost = round(float(total_output_tokens) * output_token_price / 1000, 6)
         cached_tokens_cost = round(float(total_cached_tokens) * cached_token_price / 1000, 6)      
 
-        tokens_cost = non_cached_tokens_cost \
-                   + output_tokens_cost \
-                   + cached_tokens_cost
+        tokens_cost = non_cached_tokens_cost + output_tokens_cost + cached_tokens_cost
 
-
-        image_prices=self.usage['telegram_config']['image_prices']
+        # Calculate image costs
+        image_prices = self.usage['telegram_config']['image_prices']
         total_images = [
             sum(values) for values in zip(
                 *[day_data['number_images'] for day_data in usage_history.values()]
@@ -850,22 +844,47 @@ class UsageTracker:
         ]
         image_cost = sum([count * price for count, price in zip(total_images, image_prices)])
 
+        # Calculate transcription costs
         total_transcription_seconds = sum(
             day_data['transcription_seconds'] for day_data in usage_history.values()
         )
         transcription_cost = round(total_transcription_seconds * minute_price / 60, 2)
 
+        # Calculate vision costs
         vision_token_price = self.usage['telegram_config']['vision_token_price']
         total_vision_tokens = sum(
             day_data['vision_tokens'] for day_data in usage_history.values()
         )
         vision_cost = round(total_vision_tokens * vision_token_price / 1000, 2)
 
-        total_characters = [sum((tts_model.values()) for tts_model in day_data['tts_characters'].values()) for day_data in usage_history.values()]
+        # Calculate TTS costs
         tts_prices = self.usage['telegram_config']['tts_prices']
-        tts_cost = round(sum([count * price / 1000 for count, price in zip(total_characters, tts_prices)]), 2)
+        tts_models = ['tts-1', 'tts-1-hd']
+        total_tts_characters = {model: 0 for model in tts_models}
+        
+        for day_data in usage_history.values():
+            if 'tts_characters' in day_data:
+                for model in tts_models:
+                    if model in day_data['tts_characters']:
+                        total_tts_characters[model] += day_data['tts_characters'][model]
+        
+        tts_cost = sum(total_tts_characters[model] * price / 1000 
+                      for model, price in zip(tts_models, tts_prices))
+        tts_cost = round(tts_cost, 2)
 
-        all_time_cost = tokens_cost + transcription_cost + image_cost + vision_cost + tts_cost
+        # Calculate Kokoro TTS costs
+        kokoro_price = self.usage['telegram_config']['kokoro_tts_price']
+        total_kokoro_characters = 0
+        
+        for day_data in usage_history.values():
+            if 'kokoro_tts_characters' in day_data:
+                for model_chars in day_data['kokoro_tts_characters'].values():
+                    total_kokoro_characters += model_chars
+        
+        kokoro_cost = round(total_kokoro_characters * kokoro_price / 1000, 2)
+
+        # Calculate total cost
+        all_time_cost = tokens_cost + transcription_cost + image_cost + vision_cost + tts_cost + kokoro_cost
         return all_time_cost
 
     def add_pending_broadcast(self, broadcast_id: str, message: str, recipient_count: int):

@@ -438,7 +438,7 @@ class ChatGPTTelegramBot:
 
         async def _generate():
             try:
-                speech_file, text_length = await self.openai.generate_speech(self.user_id, self.username, text=tts_query)
+                speech_file, text_length = await self.openai.generate_speech(text=tts_query)
 
                 await update.effective_message.reply_voice(
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
