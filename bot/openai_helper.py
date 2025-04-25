@@ -232,9 +232,9 @@ class OpenAIHelper:
 
         self.user_update(user_id,username,chat_id)
 
-        if str(chat_id) not in self.conversations:
+        if chat_id not in self.conversations:
             self.reset_chat_history(self.user_id, self.username, chat_id)
-        return len(self.conversations[str(chat_id)]), self.__count_tokens(self.conversations[str(chat_id)])
+        return len(self.conversations[chat_id]), self.__count_tokens(self.conversations[str(chat_id)])
 
     async def get_chat_response(self, user_id: int, username: str, chat_id: int,role:str, query: str , super_access=False) -> tuple[str, str]:
         """
