@@ -5,6 +5,8 @@ from typing import Dict
 import yt_dlp
 import shutil
 import json
+import random
+import string
 
 from .plugin import Plugin
 
@@ -44,20 +46,30 @@ class YouTubeDownloaderPlugin(Plugin):
             }
         }]
 
+    def generate_random_string(self, length):
+        characters = string.ascii_letters + string.digits
+        return ''.join(random.choice(characters) for _ in range(length))
+
     async def execute(self, function_name, helper, **kwargs) -> Dict:
         url = kwargs['url']
         action = kwargs.get('action', 'video')
         subtitle_lang = kwargs.get('subtitle_lang', 'en')
         
-        # Create a temporary directory
-        temp_dir = tempfile.mkdtemp()
+        # Create upload directory for youtube downloads
+        temp_dir = "uploads/youtube"
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+            
+        # Generate a random filename
+        random_filename = self.generate_random_string(15)
+        output_path = os.path.join(temp_dir, f"%(title)s_{random_filename}.%(ext)s")
+
         try:
             # Common yt-dlp options
             ydl_opts = {
                 'quiet': True,
                 'no-warnings': True,
-                'paths': {'home': temp_dir},
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'outtmpl': output_path,
                 # Enable cleanup of downloaded fragments
                 'cleanup': True
             }
@@ -141,9 +153,6 @@ class YouTubeDownloaderPlugin(Plugin):
                 logging.error(f"Error downloading from YouTube: {str(e)}")
                 return {"error": f"Failed to process video: {str(e)}"}
 
-        finally:
-            # Let yt-dlp handle cleanup of fragments, we just need to clean up our temp dir
-            try:
-                shutil.rmtree(temp_dir)
-            except Exception as e:
-                logging.error(f"Error cleaning up temp directory: {str(e)}")
+        except Exception as e:
+            logging.error(f"Error in YouTube downloader: {str(e)}")
+            return {"error": f"An unexpected error occurred: {str(e)}"}
