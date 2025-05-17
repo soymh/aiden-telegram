@@ -42,6 +42,39 @@ A [Telegram bot](https://core.telegram.org/bots/api) that integrates with OpenAI
 - [x] (NEW!) Vision support [announced on November 6, 2023](https://platform.openai.com/docs/guides/vision) - by [@gilcu3](https://github.com/gilcu3)
 - [x] (NEW!) GPT-4o model support [announced on May 12, 2024](https://openai.com/index/hello-gpt-4o/) - by [@err09r](https://github.com/err09r)
 - [x] (NEW!) o1 and o1-mini model preliminary support
+- [x] (NEW!) Advanced Plugin System with ML-powered integrations:
+  - ArXiv Search & Extract - Search and summarize academic papers
+  - YouTube Video/Audio Tools - Download and extract audio from videos
+  - Image Generation with multiple providers (DALL-E, Flux)
+  - KokoroTTS Integration - Advanced text-to-speech capabilities
+  - IP Location Tracking - Get geographical info for IP addresses
+  - LaTeX to Image Conversion - Render LaTeX equations
+  - Reddit Content Helper - Interact with Reddit content
+  - Telegram Integration - Message extraction and moderation
+  - Web Content Extraction - Smart webpage parsing
+- [x] (NEW!) Enhanced Vision Capabilities:
+  - Support for multiple vision models (GPT-4o, Gemini)
+  - Automatic image analysis and captioning
+  - Vision-based conversation context
+  - Multi-image processing support
+- [x] (NEW!) Advanced Text-to-Speech:
+  - Multiple TTS providers (OpenAI, Google, Kokoro)
+  - Voice customization options
+  - Multi-language support
+  - Character-based pricing
+- [x] (NEW!) Improved Usage Tracking:
+  - Per-user and per-chat tracking
+  - Multi-service cost calculation
+  - Budget management system
+  - Usage statistics and reporting
+- [x] (BETA!) Translation Tools for Bot Localization:
+  - Automated JSON-based translation system
+  - Support for multiple language targets
+  - AI-powered professional translations
+  - Maintains placeholder integrity
+  - Command-line interface for easy use
+  - Progressive translation with state saving
+  - Skips existing translations to save costs
 
 ## Additional features - help needed!
 If you'd like to help, check out the [issues](https://github.com/n3d1117/chatgpt-telegram-bot/issues) section and contribute!  
@@ -153,6 +186,16 @@ Check out the [official API reference](https://platform.openai.com/docs/api-refe
 | `whois`                   | Query the whois domain database - by [@jnaskali](https://github.com/jnaskali)                                                                       | -                                                                    | `whois`             |
 | `webshot`                 | Screenshot a website from a given url or domain name - by [@noriellecruz](https://github.com/noriellecruz)                                          | -                                                                    |                     |
 | `auto_tts`                | Text to speech using OpenAI APIs - by [@Jipok](https://github.com/Jipok)                                                                            | -                                                                    |                     |
+| `arxiv_extract`            | Extract and summarize academic papers from arXiv                                                                                                        | -                                                                    | `arxiv`            |
+| `arxiv_search`             | Search academic papers on arXiv with advanced filtering                                                                                                 | -                                                                    | `arxiv`            |
+| `kokoro_tts`              | Advanced text-to-speech using KokoroTTS engine                                                                                                         | `KOKORO_TTS_API_KEY`, `KOKORO_TTS_BASE_URL`                         | -                  |
+| `iplocation`              | Get detailed geographical information for IP addresses                                                                                                  | -                                                                    | `requests`         |
+| `latex_to_image`          | Convert LaTeX equations to images                                                                                                                      | -                                                                    | `matplotlib`       |
+| `reddit_helper`           | Interact with Reddit content (posts, comments, subreddits)                                                                                             | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`                           | `praw`             |
+| `telegram_extract`        | Extract and process Telegram messages and media                                                                                                        | -                                                                    | -                  |
+| `telegram_moderator`      | Advanced moderation tools for Telegram groups                                                                                                          | `BOT_TOKEN_MODERATOR`                                                | -                  |
+| `web_extract`            | Smart extraction of content from web pages                                                                                                             | -                                                                    | `beautifulsoup4`   |
+| `youtube_downloader`     | Download YouTube videos in various formats                                                                                                             | -                                                                    | `yt-dlp`           |
 
 #### Environment variables
 | Variable                          | Description                                                                                                                                                                                     | Default value                       |
@@ -164,6 +207,14 @@ Check out the [official API reference](https://platform.openai.com/docs/api-refe
 | `WORLDTIME_DEFAULT_TIMEZONE`      | Default timezone to use, i.e. `Europe/Rome` (required only for the `worldtimeapi` plugin, you can get TZ Identifiers from [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)) | -                                   |
 | `DUCKDUCKGO_SAFESEARCH`           | DuckDuckGo safe search (`on`, `off` or `moderate`) (optional, applies to `ddg_web_search` and `ddg_image_search`)                                                                               | `moderate`                          |
 | `DEEPL_API_KEY`                   | DeepL API key (required for the `deepl` plugin, you can get one [here](https://www.deepl.com/pro-api?cta=header-pro-api))                                                                       | -                                   |
+| `KOKORO_TTS_API_KEY`            | API key for KokoroTTS service                                                                                                                                                                  | -                                   |
+| `KOKORO_TTS_BASE_URL`           | Base URL for KokoroTTS API                                                                                                                                                                     | `http://127.0.0.1:3000/api/v1`     |
+| `REDDIT_CLIENT_ID`              | Reddit API client ID for reddit_helper plugin                                                                                                                                                   | -                                   |
+| `REDDIT_CLIENT_SECRET`          | Reddit API client secret for reddit_helper plugin                                                                                                                                               | -                                   |
+| `BOT_TOKEN_MODERATOR`           | Secondary bot token for moderation features                                                                                                                                                     | -                                   |
+| `FLUX_API_KEY`                  | API key for Flux image generation service                                                                                                                                                       | -                                   |
+| `FLUX_BASE_URL`                 | Base URL for Flux API                                                                                                                                                                           | Default Flux API URL                |
+| `FLUX_IMAGE_MODEL`              | Model to use for Flux image generation                                                                                                                                                          | `black-forest-labs/FLUX.1-schnell-Free` |
 
 ### Installing
 Clone the repository and navigate to the project directory:
@@ -229,6 +280,312 @@ docker run -it --env-file .env chatgpt-telegram-bot
 Here is an example of `Procfile` for deploying using Heroku (thanks [err09r](https://github.com/err09r)!):
 ```
 worker: python -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python bot/main.py
+```
+
+## Changelog
+
+### Infrastructure & Configuration Updates
+#### Docker Configuration
+- Added `.dockerignore` file to optimize Docker builds:
+  - Excludes non-essential files: .env, .github, configuration files
+  - Improves build performance and security
+- Updated Dockerfile with optimizations:
+  - Base image: Python 3.9-alpine for minimal footprint
+  - Includes ffmpeg for audio/video processing
+  - Configured Python environment variables for optimal performance:
+    - PYTHONFAULTHANDLER=1 for better error tracking
+    - PYTHONUNBUFFERED=1 for immediate log output
+    - PYTHONDONTWRITEBYTECODE=1 to reduce image size
+    - PIP_DISABLE_PIP_VERSION_CHECK=on for faster builds
+
+#### Environment Configuration
+- Added comprehensive `.env.example` with detailed configuration sections:
+  - API Configuration (OpenAI, Model selection)
+  - Telegram Bot Configuration (Bot tokens, channel/group IDs)
+  - User Access Control (Admin and allowed user management)
+  - Message Keywords and Triggers
+  - Optional Features and Pricing
+  - Proxy Settings
+  - Image and Vision Configuration
+  - Text-to-Speech Configuration
+  - Conversation Settings
+  - Plugin Configuration
+
+#### Version Control
+- Added `.gitignore` to exclude sensitive and generated files:
+  - Python cache files (__pycache__)
+  - Environment files (.env)
+  - IDE files (.idea)
+  - System files (.DS_Store)
+  - Log directories (usage_logs)
+  - Virtual environment (venv)
+  - Cache directories (.cache)
+
+### Model Support & AI Integration
+#### New Model Integration
+- Enhanced model support in `gpt_all_models.py`:
+  - GPT-3.5 Models:
+    - Base model: gpt-3.5-turbo
+    - Legacy versions: 0301, 0613
+    - Extended context versions: 16k variants
+    
+  - GPT-4 Models:
+    - Standard versions: gpt-4, gpt-4-0314, gpt-4-0613
+    - Extended context: 32k variants
+    - Latest versions: turbo-preview, 0125-preview
+    - Context window variants: 128K models
+    
+  - Vision-capable Models:
+    - OpenAI: gpt-4o with vision capabilities
+    - Google: gemini-2.0-flash for multimodal interactions
+    
+  - GPT-4o Specialized Models:
+    - gpt-4o-mini for efficient processing
+    - chatgpt-4o-latest for cutting-edge features
+    - Specialized variants like gpt-4o-mini-2024-07-18
+    
+  - O1 Series Models:
+    - Base model: o1
+    - Efficient variant: o1-mini
+    - Preview version: o1-preview
+    
+  - Third-party Models:
+    - TogetherAI integrations:
+      - Qwen2.5-Coder-32B-Instruct
+      - Llama-3.3-70B-Instruct-Turbo
+    - Google AI Studio models:
+      - Gemini 2.0/2.5 variants
+      - Flash and preview versions
+
+### Core Functionality Updates
+#### Server Integration
+- Added Flask server integration in `main.py`:
+  - Keep-alive endpoint implementation
+  - Automatic health checks every 5 minutes
+  - Threading support for concurrent operations
+  - Configurable port settings
+  - Error handling and logging
+
+#### OpenAI Helper Enhancements
+- Enhanced OpenAI helper with comprehensive features:
+  - Dynamic model support with automatic capability detection
+  - Smart token limit management:
+    - Model-specific default limits
+    - Automatic adjustment based on model capabilities
+  - Function/plugin availability checking:
+    - Model compatibility verification
+    - Automatic fallback handling
+  - Improved error handling and retry logic
+  - Support for new API endpoints and features
+
+### Environment Variable Updates
+#### Deprecation Notices
+- Updated environment variable naming conventions:
+  - MONTHLY_USER_BUDGETS → USER_BUDGETS with BUDGET_PERIOD
+    - More flexible budget period management
+    - Support for daily, monthly, and all-time tracking
+  - MONTHLY_GUEST_BUDGET → GUEST_BUDGET with BUDGET_PERIOD
+    - Consistent with new budget system
+    - Enhanced guest access control
+
+#### New Configuration Options
+- Added support for new environment variables:
+  - Model-specific configurations
+  - Vision and audio processing settings
+  - Enhanced security options
+  - Expanded plugin support
+  - Performance tuning parameters
+
+### Core Usage Tracking System Overhaul
+#### Usage Tracker Module Enhancements (`usage_tracker.py`)
+- Complete architectural redesign of the usage tracking system:
+  - Advanced JSON-based persistent storage
+  - Atomic file operations for improved data integrity
+  - Enhanced error handling and logging
+  - Thread-safe operations
+
+#### Configuration Management
+- Implemented dynamic configuration system:
+  - Separated OpenAI and Telegram configurations
+  - Role-based access control for config updates
+  - Configuration validation and type conversion
+  - Automatic config synchronization
+  - Default value fallbacks
+
+#### Usage Tracking Features
+- Enhanced token tracking:
+  - Separate tracking for input, output, and cached tokens
+  - Model-specific token pricing
+  - Improved cost calculation accuracy
+  - Token usage statistics per conversation
+
+- Comprehensive cost tracking:
+  - Multi-period budget tracking (daily/monthly/all-time)
+  - Detailed cost breakdowns by service:
+    - Chat token usage
+    - Image generation
+    - Audio transcription
+    - Vision API usage
+    - Text-to-speech services
+    - KokoroTTS integration
+
+- Conversation management:
+  - Multi-chat support with separate histories
+  - Vision conversation tracking
+  - Automatic conversation cleanup
+  - Timestamp-based conversation management
+
+#### New Tracking Capabilities
+- Vision API usage tracking:
+  - Token counting for vision models
+  - Cost tracking per vision request
+  - Vision conversation state management
+
+- Text-to-Speech tracking:
+  - Character count tracking
+  - Multiple TTS model support (tts-1, tts-1-hd)
+  - KokoroTTS integration with separate pricing
+  - Usage statistics per TTS model
+
+- Broadcast message handling:
+  - Pending broadcast storage
+  - Automatic broadcast expiration
+  - Recipient counting and tracking
+  - Broadcast message persistence
+
+#### Performance Optimizations
+- File I/O improvements:
+  - Atomic write operations
+  - Cached file reading
+  - Efficient JSON handling
+  - Reduced disk operations
+
+- Memory management:
+  - Optimized data structures
+  - Efficient conversation storage
+  - Automatic cleanup of expired data
+
+#### Administrative Features
+- Enhanced admin controls:
+  - Detailed usage statistics
+  - Configuration management
+  - User budget control
+  - System monitoring capabilities
+
+- Reporting capabilities:
+  - Detailed usage reports
+  - Cost analysis tools
+  - Usage trend tracking
+  - Budget monitoring
+
+## New Features Usage Guide
+
+### JSON Translation Tool (Beta)
+The bot includes a powerful JSON translation tool that helps in localizing bot responses and messages.
+
+#### Usage:
+```bash
+python bot/translate_json.py <target_language> <language_code>
+```
+Example:
+```bash
+python bot/translate_json.py "Persian (Farsi)" "fa"
+```
+
+Features:
+- Automatically translates missing entries while preserving existing ones
+- Maintains JSON structure and placeholders
+- Professional-quality translations using AI
+- Progress tracking and state saving
+- Cost-efficient by skipping existing translations
+
+### Vision Features Usage
+Send images to the bot in several ways:
+1. Direct image upload
+2. Image with caption
+3. Multiple images in one message
+4. Reply to image with follow-up questions
+
+Commands:
+- `/vision <model>` - Switch between vision models
+- Vision models available:
+  - `gpt-4o` - OpenAI's vision model
+  - `gemini-2.0-flash` - Google's vision model
+
+### Advanced TTS Features
+Multiple TTS providers with different capabilities:
+
+1. OpenAI TTS:
+```
+/tts <text> --voice alloy
+```
+Available voices: alloy, echo, fable, onyx, nova, shimmer
+
+2. KokoroTTS:
+```
+/tts <text> --engine kokoro --voice af_heart
+```
+Features:
+- Multiple voice options
+- Local deployment support
+- Custom voice training
+
+3. Google TTS:
+```
+/tts <text> --engine google
+```
+
+### Plugin System
+New plugins can be enabled in your .env file:
+
+1. ArXiv Integration:
+```
+/arxiv <query> - Search papers
+/paper <paper_id> - Get paper summary
+```
+
+2. YouTube Tools:
+```
+/ytdl <url> - Download video
+/ytaudio <url> - Extract audio
+```
+
+3. Advanced Image Generation:
+```
+/image <prompt> [--provider dalle|flux]
+```
+
+4. LaTeX Rendering:
+```
+/latex <equation>
+```
+
+5. IP Location:
+```
+/ip <address>
+```
+
+6. Reddit Integration:
+```
+/reddit <url>
+```
+
+7. Web Extraction:
+```
+/extract <url>
+```
+
+### Usage Tracking
+Monitor your usage with enhanced commands:
+- `/stats` - View detailed usage statistics
+- `/budget` - Check remaining budget
+- `/usage` - See current period usage
+- `/reset_stats` - Reset usage statistics (admin only)
+
+### Installation
+For new plugins, additional dependencies may be required:
+```bash
+pip install arxiv youtube_dl beautifulsoup4 praw latex2mathml
 ```
 
 ## Credits

@@ -23,6 +23,7 @@ from plugins.telegram_extract import TelegramScraperPlugin
 from plugins.arxiv_extract import ArxivContentScraperPlugin
 from plugins.image_gen import ImageGeneratorPlugin
 from plugins.reddit_helper import RedditHelper
+from plugins.youtube_downloader import YouTubeDownloaderPlugin
 
 
 class PluginManager:
@@ -55,6 +56,7 @@ class PluginManager:
             'telegram_extract': TelegramScraperPlugin,
             'arxiv_extract': ArxivContentScraperPlugin,
             'image_gen': ImageGeneratorPlugin,
+            'youtube_downloader': YouTubeDownloaderPlugin,
             'reddit_helper': RedditHelper
         }
         self.plugins = [plugin_mapping[plugin]() for plugin in enabled_plugins if plugin in plugin_mapping]

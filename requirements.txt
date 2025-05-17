@@ -20,3 +20,7 @@ pyperclip==1.9.0
 requests==2.32.3
 wikipedia==1.4.0
 flask
+yt-dlp>=2024.03.10
+ffmpeg-python>=0.2.0
+
+httpx>=0.25.0
