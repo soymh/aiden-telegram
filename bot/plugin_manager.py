@@ -4,10 +4,7 @@ from plugins.gtts_text_to_speech import GTTSTextToSpeech
 from plugins.auto_tts import AutoTextToSpeech
 from plugins.kokoro_tts import KokoroTTSPlugin
 from plugins.dice import DicePlugin
-from plugins.youtube_audio_extractor import YouTubeAudioExtractorPlugin
 from plugins.ddg_image_search import DDGImageSearchPlugin
-from plugins.spotify import SpotifyPlugin
-from plugins.crypto import CryptoPlugin
 from plugins.weather import WeatherPlugin
 from plugins.ddg_web_search import DDGWebSearchPlugin
 from plugins.wolfram_alpha import WolframAlphaPlugin
@@ -24,6 +21,7 @@ from plugins.arxiv_extract import ArxivContentScraperPlugin
 from plugins.image_gen import ImageGeneratorPlugin
 from plugins.reddit_helper import RedditHelper
 from plugins.youtube_downloader import YouTubeDownloaderPlugin
+from plugins.media_relay import MediaRelayPlugin
 
 
 class PluginManager:
@@ -36,12 +34,9 @@ class PluginManager:
         plugin_mapping = {
             'wolfram': WolframAlphaPlugin,
             'weather': WeatherPlugin,
-            'crypto': CryptoPlugin,
             'ddg_web_search': DDGWebSearchPlugin,
             'ddg_image_search': DDGImageSearchPlugin,
-            'spotify': SpotifyPlugin,
             'worldtimeapi': WorldTimeApiPlugin,
-            'youtube_audio_extractor': YouTubeAudioExtractorPlugin,
             'dice': DicePlugin,
             'deepl_translate': DeeplTranslatePlugin,
             'gtts_text_to_speech': GTTSTextToSpeech,
@@ -57,7 +52,8 @@ class PluginManager:
             'arxiv_extract': ArxivContentScraperPlugin,
             'image_gen': ImageGeneratorPlugin,
             'youtube_downloader': YouTubeDownloaderPlugin,
-            'reddit_helper': RedditHelper
+            'reddit_helper': RedditHelper,
+            'media_relay': MediaRelayPlugin
         }
         self.plugins = [plugin_mapping[plugin]() for plugin in enabled_plugins if plugin in plugin_mapping]
 
