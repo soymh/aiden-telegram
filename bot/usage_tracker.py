@@ -33,7 +33,6 @@ class UsageTracker:
         :param logs_dir: path to directory of usage logs, defaults to "usage_logs"
         """
         today = date.today()
-
         self.are_functions_available = are_functions_available
         self.default_max_tokens = default_max_tokens
         self.functions_available = self.are_functions_available(model=model) if self.are_functions_available else True
@@ -41,8 +40,6 @@ class UsageTracker:
         self.user_id = user_id
         self.chat_id = chat_id 
         self.logs_dir = os.path.join(logs_dir, str(user_id))
-
-        # path to usage file of given user and creation
         self.user_file = os.path.join(self.logs_dir, f"{self.user_id}.json")
         pathlib.Path(self.user_file).parent.mkdir(parents=True, exist_ok=True)
 
@@ -173,53 +170,12 @@ class UsageTracker:
         if os.path.isfile(self.user_file):
             with open(self.user_file, "r") as file:
                 self.usage = json.load(file)
-            if str(today) not in self.usage['usage_history']:
-                self.usage['usage_history'][str(today)] = {}
-            if 'chat_tokens' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['chat_tokens'] = {
-                    "input_token_count":int(),
-                    "output_token_count":int(),
-                    "cached_token_count":int()
-                }
-
-            if 'transcription_seconds' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['transcription_seconds'] = 0
-            if 'number_images' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['number_images'] = [0,0,0]
-            if 'tts_characters' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['tts_characters'] = {}
-            if 'kokoro_tts_characters' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['kokoro_tts_characters'] = {}
-            if 'vision_tokens' not in self.usage['usage_history'][str(today)]:
-                self.usage['usage_history'][str(today)]['vision_tokens'] = int()
-            if 'pending_broadcasts' not in self.usage : 
-                self.usage["pending_broadcasts"] = {}
-
-
+            self._patch_old_usage(today, username)
         else:
             # ensure directory exists
             pathlib.Path(self.logs_dir).mkdir(parents=True, exist_ok=True)
             # create new dictionary for this user
-            self.usage = {
-                "username": username,
-                "current_cost": {"day": 0.0, "month": 0.0, "all_time": 0.0, "last_update": str(date.today())},
-                "usage_history": {str(today):{"chat_tokens": {
-                    "input_token_count":int(),
-                    "output_token_count":int(),
-                    "cached_token_count":int()
-                },
-                "transcription_seconds": int(),
-                "number_images": [0,0,0],
-                "tts_characters": {},
-                "vision_tokens":int()}
-                },
-                "openai_config": self.openai_config,
-                "telegram_config": self.telegram_config,
-                "conversations": self.conversations,
-                "vision_conversations": self.conversations_vision,
-                "last_updated": self.last_updated,
-                "pending_broadcasts": {}  # New field for storing broadcast data
-            }
+            self.usage = self._default_usage_dict(today, username)
 
         self.openai_keys = {key for key in self.openai_config.keys()}
         self.openai_exclude = {'flux_base_url', 'vision_max_tokens', 'enable_vision_follow_up_questions', 'whisper_prompt', 'functions_max_consecutive_calls'}
@@ -227,6 +183,64 @@ class UsageTracker:
         self.telegram_keys = {key for key in self.telegram_config.keys()}
         self.tel_exclude = {'token', 'admin_user_id', 'user_ids_list', 'is_admin', 'is_awaiting', 'is_allowed', 'is_forbidden', 'budget_period', 'user_budgets', 'guest_budget', 'token_price', 'image_prices', 'transcription_price', 'vision_token_price', 'tts_prices', 'proxy'}
                             
+
+    def _default_usage_dict(self, today, username):
+        """Return a fresh usage dict for a new user."""
+        return {
+            "username": username,
+            "current_cost": {"day": 0.0, "month": 0.0, "all_time": 0.0, "last_update": str(today)},
+            "usage_history": {str(today):{"chat_tokens": {
+                "input_token_count":int(),
+                "output_token_count":int(),
+                "cached_token_count":int()
+            },
+            "transcription_seconds": int(),
+            "number_images": [0,0,0],
+            "tts_characters": {},
+            "vision_tokens":int()}
+            },
+            "openai_config": self.openai_config,
+            "telegram_config": self.telegram_config,
+            "conversations": self.conversations,
+            "vision_conversations": self.conversations_vision,
+            "last_updated": self.last_updated,
+            "pending_broadcasts": {}
+        }
+
+    def _patch_old_usage(self, today, username):
+        """
+        Patch old user configs to ensure all required keys/values are present.
+        This prevents KeyError for old users after config structure changes.
+        Also updates the username if it has changed or is missing.
+        """
+        # Patch top-level keys
+        defaults = self._default_usage_dict(today, username)
+        for key, value in defaults.items():
+            if key not in self.usage:
+                self.usage[key] = value
+        # Always update username if different or missing
+        if 'username' not in self.usage or self.usage['username'] != username:
+            self.usage['username'] = username
+        # Patch usage_history for today
+        if str(today) not in self.usage['usage_history']:
+            self.usage['usage_history'][str(today)] = defaults['usage_history'][str(today)]
+        # Patch subkeys in today's usage_history
+        for subkey, subval in defaults['usage_history'][str(today)].items():
+            if subkey not in self.usage['usage_history'][str(today)]:
+                self.usage['usage_history'][str(today)][subkey] = subval
+        # Patch openai_config and telegram_config
+        for k, v in self.openai_config.items():
+            if k not in self.usage['openai_config']:
+                self.usage['openai_config'][k] = v
+        for k, v in self.telegram_config.items():
+            if k not in self.usage['telegram_config']:
+                self.usage['telegram_config'][k] = v
+        # Patch conversations, vision_conversations, last_updated, pending_broadcasts
+        for k in ['conversations', 'vision_conversations', 'last_updated', 'pending_broadcasts']:
+            if k not in self.usage:
+                self.usage[k] = defaults[k]
+        # Save patched usage
+        self.save_state()
 
     def save_state(self):
         """
@@ -483,8 +497,7 @@ class UsageTracker:
             current_usage["usage_history"][today_str]["chat_tokens"] = {}
 
         for key, value in {"input_token_count": input_tokens, "output_token_count": output_tokens, "cached_token_count": cached_tokens}.items():
-
-            if "input_token_count" in current_usage["usage_history"][today_str]["chat_tokens"]:
+            if key in current_usage["usage_history"][today_str]["chat_tokens"]:
                 current_usage["usage_history"][today_str]["chat_tokens"][key] += int(value)
             else:
                 current_usage["usage_history"][today_str]["chat_tokens"][key] = int(value)
