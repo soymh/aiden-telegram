@@ -2149,7 +2149,16 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler(
             'setconfig', self.config_commands, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE)
         )
-        application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex(r"^/dmadmin\b"),self.dmadmin,),group=0)
+        ALL_ATTACHMENTS = (
+            filters.Document.ALL
+            | filters.PHOTO
+            | filters.VIDEO
+            | filters.AUDIO
+            | filters.VOICE
+            | filters.VIDEO_NOTE
+)
+
+        application.add_handler(MessageHandler(ALL_ATTACHMENTS & filters.CaptionRegex(r"^/dmadmin\b"),self.dmadmin,),group=0)
         application.add_handler(MessageHandler(
             ( filters.PHOTO | filters.Document.IMAGE ) & ~filters.CaptionRegex(r"^/dmadmin\b"),
             self.vision), group=1)
