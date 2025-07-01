@@ -160,6 +160,10 @@ class UsageTracker:
             
             # Conversation Settings
             'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
+            'bot_signature': os.environ.get('BOT_SIGNATURE', 'By AidenBot'),  # Signature to append to bot messages
+            'required_channel_id': os.environ.get('REQUIRED_CHANNEL_ID', ''),  # Channel user must join
+            'admin_dm_ratelimit': int(os.environ.get('ADMIN_DM_RATELIMIT', 1)),  # Per-user DM rate limit (hours)
+            'last_admin_dm_time': 0,  # Timestamp of last DM to admin
         }
         self.conversations: dict[int: list] = {self.chat_id:[]}  # {chat_id: history}  
         self.conversations_vision: dict[str: bool] = {self.chat_id:bool()}  # {chat_id: is_vision}
@@ -232,12 +236,24 @@ class UsageTracker:
             json.dump(self.usage, outfile, indent=4)
 
 
-    def do_conversations(self, chat_id, update_value=None,reset=False):
+    def do_conversations(self, chat_id, update_value=None,reset=False, log_message=None):
         """
-        Update conversations dict in usage.
+        Update conversations dict in usage. Optionally log every user message.
         """
         now = datetime.now()
         formatted_now = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Log every user message (even if not answered)
+        if log_message is not None:
+            if 'initial_message_s' not in self.usage:
+                self.usage['initial_message_s'] = []
+            self.usage['initial_message_s'].append({
+                'chat_id': chat_id,
+                'timestamp': formatted_now,
+                'message': log_message
+            })
+            with open(self.user_file, "w") as outfile:
+                json.dump(self.usage, outfile, indent=4)
 
         if update_value:
             if not reset:
@@ -664,7 +680,7 @@ class UsageTracker:
             if tts_model in self.usage["usage_history"][str(today)]["tts_characters"]: 
                 for today, data in self.usage["usage_history"].items():
                     if today.startswith(month):
-                        characters_month += characters
+                        characters_month += data
         return int(characters_day), int(characters_month)
 
     def add_kokoro_tts_request(self, text_length, kokoro_model, kokoro_prices="0.015"):

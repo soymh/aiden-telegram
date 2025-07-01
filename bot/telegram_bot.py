@@ -7,6 +7,7 @@ import io
 from io import BytesIO
 import json
 import base64
+from datetime import datetime
 
 from uuid import uuid4
 from telegram import BotCommandScopeAllGroupChats, Update, constants , InputMediaPhoto
@@ -75,7 +76,8 @@ class ChatGPTTelegramBot:
             BotCommand(command='reset', description=self.localized_text('reset_description', bot_language)),
             BotCommand(command='stats', description=self.localized_text('stats_description', bot_language)),
             BotCommand(command='resend', description=self.localized_text('resend_description', bot_language)),
-            BotCommand(command='setconfig', description=self.localized_text('setconfig_description', bot_language))
+            BotCommand(command='setconfig', description=self.localized_text('setconfig_description', bot_language)),
+            BotCommand(command='dmadmin', description=self.localized_text('dmadmin_description', bot_language))
 
         ]
         # If imaging is enabled, add the "image" command to the list
@@ -176,6 +178,7 @@ class ChatGPTTelegramBot:
                 '\n\n' +
                 self.localized_text('help_text', bot_language)[2]
         )
+        help_text = await self.append_signature(help_text)
         await update.message.reply_text(help_text, disable_web_page_preview=True)
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1158,42 +1161,189 @@ class ChatGPTTelegramBot:
             await self.process_openai_response(update, context, prompt, chat_id, role="user")
 
 
+    async def append_signature(self, text: str) -> str:
+        """
+        Appends the user's configured signature to the bot message, if set.
+        """
+        signature = self.config.get('bot_signature', '')
+        if signature:
+            return f"{text}\n\n{signature}"
+        return text
+
+    async def check_user_channel_membership(self, update, context) -> bool:
+        """
+        Checks if the user is a member of the required channel. Returns True if joined or no channel set.
+        """
+        required_channel_id = self.config.get('required_channel_id', '')
+        if not required_channel_id:
+            return True
+        user_id = update.effective_user.id
+        try:
+            member = await context.bot.get_chat_member(required_channel_id, user_id)
+            return member.status in ["member", "administrator", "creator"]
+        except Exception as e:
+            self.logger.warning(f"Channel membership check failed: {e}")
+            return False
+
+    async def send_channel_join_message(self, update, context):
+        """
+        Sends a message via inline query callback to prompt the user to join the required channel.
+        """
+        required_channel_id = self.config.get('required_channel_id', '')
+        channel_link = (
+            f"https://t.me/{required_channel_id.lstrip('@')}"
+            if required_channel_id else ""
+        )
+        join_text = (
+            "You must join the required channel to use this bot.\n"
+            f"Join here: {channel_link}"
+        )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton(text="Join Channel", url=channel_link)
+        ]])
+
+        if update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(
+                join_text,
+                reply_markup=keyboard
+            )
+
+        elif update.inline_query:
+            result = InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="Join Required Channel",
+                input_message_content=InputTextMessageContent(join_text),
+                reply_markup=keyboard,
+                description="Click to send the join link with button"
+            )
+            await context.bot.answer_inline_query(
+                update.inline_query.id,
+                results=[result],
+                cache_time=0
+            )
+
+        else:
+            await update.effective_message.reply_text(
+                join_text,
+                reply_markup=keyboard
+            )
+
     async def prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         React to incoming messages and respond accordingly.
         """
         user = update.effective_user
         await self.user_update(update,context)
+        # Log every user message
+        chat_id = update.effective_chat.id
+        msg = message_text(update.message)
         if update.edited_message or not update.message or update.message.via_bot:
+            self.usage[user.id].do_conversations(chat_id, log_message=msg+':'+str(update))
             return
-
         # If the user is awaiting channel ID input, do nothing here.
-        dummy , is_awaiting = self.usage[user.id].retrieve_config_value('telegram', 'is_awaiting', True)
+        done , is_awaiting = self.usage[user.id].retrieve_config_value('telegram', 'is_awaiting', True)
         if is_awaiting :
+            self.usage[user.id].do_conversations(chat_id, log_message=msg+':'+str(update))
+            return
+        # Channel membership check
+        if not await self.check_user_channel_membership(update, context):
+            self.usage[user.id].do_conversations(chat_id, log_message=msg+':'+str(update))
+            await self.send_channel_join_message(update, context)
             return
         if not await is_allowed(self.config, update, context):
             self.logger.info(f"User:{user.name} with id:{user.id} is added to awaiting list")
+            self.usage[user.id].do_conversations(chat_id, log_message=msg+':'+str(update))
             self.usage[user.id].update_telegram_config(True, 'is_awaiting', True)
             await self.send_disallowed_markup(update,context)
             return
-
         if not await self.check_allowed_and_within_budget(update, context):
+            self.usage[user.id].do_conversations(chat_id, log_message=msg+':'+str(update))
             return
-
         self.logger.info(
             f'New message received from user {update.message.from_user.name} (id: {update.message.from_user.id})')
-
         chat_id = update.effective_chat.id
         user_id = update.message.from_user.id
         message_thread_id = update.message.message_thread_id
         prompt = message_text(update.message)
         self.last_message[chat_id] = prompt
-
         if is_group_chat(update):
             await self.handle_group_chat_prompt(update, context, prompt, chat_id, message_thread_id)
-
         else:
             await self.handle_private_chat_prompt(update, context, prompt, chat_id)
+
+    async def send_message_with_signature(self, update, text, **kwargs):
+        text = await self.append_signature(text)
+        await update.message.reply_text(text, **kwargs)
+
+    async def dmadmin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Allows user to DM the admin, with per-user rate limit.
+        Forwards any attached media along with the text.
+        Usage: /dmadmin <message>
+        """
+        await self.user_update(update,context)
+        user = update.effective_user
+        user_id = user.id
+        chat_id = update.effective_chat.id
+        now = datetime.now().timestamp()
+        ratelimit_secs = self.config.get('admin_dm_ratelimit', 5) * 3600
+        dummy, last_time = self.usage[user_id].retrieve_config_value('telegram', 'last_admin_dm_time', 0)
+
+        self.logger.info(f"User {user_id} requested to DM admin: {update.message.text or '<media>'}")
+
+        # permission & rate-limit checks
+        if not await is_allowed(self.config, update, context):
+            await self.send_message_with_signature(update, "You are not allowed to DM the admin.")
+            return
+
+        if ratelimit_secs > 0 and now - last_time < ratelimit_secs:
+            hours = ratelimit_secs // 3600
+            await self.send_message_with_signature(
+                update,
+                f"You can only DM the admin every {hours} hour(s)."
+            )
+            return
+
+        # require either text or media
+        if not (context.args or update.message.photo or update.message.document
+                or update.message.video or update.message.audio
+                or update.message.voice):
+            await self.send_message_with_signature(update, "Usage: /dmadmin <your message> (or attach media)")
+            return
+
+        admin_id = self.config.get('admin_user_id')
+        prefix = f"DM from user {user.name} with id {user_id}:\n"
+
+        try:
+            # if there's any media, copy the entire message
+            if update.message.photo \
+            or update.message.document \
+            or update.message.video \
+            or update.message.audio \
+            or update.message.voice:
+                # copy_message will include caption (the text)
+                # so we prepend our prefix to the caption
+                caption = prefix + (update.message.caption or ' ')
+                await context.bot.copy_message(
+                    chat_id=admin_id,
+                    from_chat_id=chat_id,
+                    message_id=update.message.message_id,
+                    caption=caption
+                )
+            else:
+                # only text
+                text = prefix + ' '.join(context.args)
+                await context.bot.send_message(chat_id=admin_id, text=text)
+
+            # update rate-limit timestamp
+            self.usage[user.id].update_telegram_config(True, 'last_admin_dm_time', now)
+            await self.send_message_with_signature(update, "Your message has been sent to the admin.")
+            # await context.bot.forward_message(chat_id=admin_id, from_chat_id=update.message.chat_id, message_id=update.message.message_id)
+        except Exception as e:
+            await self.send_message_with_signature(update, f"Failed to send to admin: {e}")
+
+        
     async def moderate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         React to incoming moderation requests and respond accordingly.
@@ -1218,7 +1368,7 @@ class ChatGPTTelegramBot:
             if (update.message.reply_to_message and update.message.reply_to_message.text):
                 self.logger.info(f"And replied to the message: {update.message.reply_to_message}")
                 prompt = f'"User replied to the text :`{update.message.reply_to_message.text}"' + f". Using these information : 'message_thread_id={update.message.message_thread_id} and group_id={update.message.chat.id}', Answer their request.NOTHING MORE!"
-            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
+            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", prompt)
             await self.process_openai_response(update, context, prompt, chat_id,role="user",super_access=True)
             return
 
@@ -1709,7 +1859,7 @@ class ChatGPTTelegramBot:
                 await update.message.reply_text("The allowed status must be 'true' or 'false'.")
                 return
             new_status = new_status_str == "true"
-            await update_user_permission(self, update, target_user_id, new_status)
+            await self.update_user_permission(update, target_user_id, new_status)
             return
 
         # --- Branch: get full configuration for a specified user ---
@@ -1984,6 +2134,7 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('resend', self.resend))
         application.add_handler(CommandHandler('broadcast', self.broadcast_message, filters=filters.ChatType.PRIVATE))
+        application.add_handler(CommandHandler('dmadmin', self.dmadmin, filters=filters.ChatType.PRIVATE))
         # Add message handler for broadcast confirmations before the general message handler
         application.add_handler(MessageHandler(
             filters.TEXT & filters.Regex(r'^(CONFIRM|CANCEL)-[a-f0-9-]+$'),
@@ -1998,9 +2149,10 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler(
             'setconfig', self.config_commands, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE)
         )
+        application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex(r"^/dmadmin\b"),self.dmadmin,),group=0)
         application.add_handler(MessageHandler(
-            filters.PHOTO | filters.Document.IMAGE,
-            self.vision))
+            ( filters.PHOTO | filters.Document.IMAGE ) & ~filters.CaptionRegex(r"^/dmadmin\b"),
+            self.vision), group=1)
         application.add_handler(MessageHandler(
             filters.AUDIO | filters.VOICE | filters.Document.AUDIO |
             filters.VIDEO | filters.VIDEO_NOTE | filters.Document.VIDEO,
