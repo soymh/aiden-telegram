@@ -1272,12 +1272,13 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         user_id = update.message.from_user.id
         message_thread_id = update.message.message_thread_id
-        parts = message_text(update.message)
-        command = parts[0]  # "/foo"
-        args = parts[1:]    # ["arg1", "arg2"]
+        text = update.message.text
+        parts = text.split()
+        command = parts[0].lstrip('/')
+        args = parts[1:]
         if command in self.usage[user_id].get_prompts():
             prompt_name = command
-            prompt = self.usage[user_id].get_prompts(prompt_name) + '\n' + args
+            prompt = self.usage[user_id].get_prompts(prompt_name) + '\n' + " ".join(args)
         else:
             prompt = message_text(update.message)
         self.last_message[chat_id] = prompt
