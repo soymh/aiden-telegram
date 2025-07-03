@@ -2218,7 +2218,6 @@ class ChatGPTTelegramBot:
             .post_init(self.post_init) \
             .concurrent_updates(True) \
             .build()
-        application.add_handler(MessageHandler(filters.COMMAND, self.prompt))
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
@@ -2268,7 +2267,8 @@ class ChatGPTTelegramBot:
         application.add_handler(InlineQueryHandler(self.inline_query, chat_types=[
             constants.ChatType.GROUP, constants.ChatType.SUPERGROUP, constants.ChatType.PRIVATE
         ]))
-        
+        application.add_handler(MessageHandler(filters.COMMAND, self.prompt))
+
 
 
         application.add_handler(CallbackQueryHandler(self.join_request_callback, pattern=r"^join_request:[0-9-]+:[0-9a-zA-Z_]+:.+:[0-9-]+$"))
