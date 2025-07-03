@@ -129,9 +129,8 @@ class ChatGPTTelegramBot:
         self.usage[self.user_id].save_state()
         self.conversations = self.usage[self.user_id].do_conversations(chat_id=chat_id)
         dummy, self.bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
-        for name, prompt in self.usage[user.id].get_prompts().items():
-            self.commands.append(BotCommand(command=name, description=prompt))
-        await context.bot.set_my_commands(self.commands)
+        # for name, _ in self.usage[user.id].get_prompts().items():
+        #     self.update_commands(update, context, name)
 
     def create_user_logger(self, user_id):
         # Create a logger for the user if it doesn't exist
@@ -2129,17 +2128,19 @@ class ChatGPTTelegramBot:
             
         return False
     
-    async def update_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE, name:str):
-        await self.user_update(update,context)
-        user = update.effective_user
-        user_id = user.id
-        await self.user_update(update,context)
-        if name in self.usage[user_id].get_prompts():
-            self.logger.info(f"User {user_id} prompts list updated for prompt:{self.usage[user_id].get_prompts(name)} by the name: {name}")
-            self.commands.append(BotCommand(command='newprompt', description=self.usage[user_id].get_prompts(name)))
-            await context.bot.set_my_commands(self.commands)
-        else:
-            self.commands.remove(name)
+    ### Since Telegram doesn't support per user commands, this won't be applicable
+
+    # async def update_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE, name:str):
+    #     await self.user_update(update,context)
+    #     user = update.effective_user
+    #     user_id = user.id
+    #     await self.user_update(update,context)
+    #     if name in self.usage[user_id].get_prompts():
+    #         self.logger.info(f"User {user_id} prompts list updated for prompt:{self.usage[user_id].get_prompts(name)} by the name: {name}")
+    #         self.commands.append(BotCommand(command=name, description=self.usage[user_id].get_prompts(name)))
+    #         await context.bot.set_my_commands(commands=self.commands, scope=BotCommandScopeChat(chat_id=user.id))
+    #     else:
+    #         self.commands.remove(name)
 
     async def new_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.user_update(update,context)
@@ -2166,8 +2167,8 @@ class ChatGPTTelegramBot:
             await self.send_message_with_signature(update, f"Your prompt has been set! You can use it using /{name}")
         except Exception as e:
             await self.send_message_with_signature(update, f"Failed to set the prompt: {e}")
-        finally:
-            await self.update_commands(update, context, name)
+        # finally:
+        #     await self.update_commands(update, context, name)
     async def delete_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.user_update(update,context)
         user = update.effective_user
@@ -2193,8 +2194,8 @@ class ChatGPTTelegramBot:
             await self.send_message_with_signature(update, f"Prompt '{name}' not found.")
         except Exception as e:
             await self.send_message_with_signature(update, f"Failed to delete the prompt: {e}")
-        finally:
-            await self.update_commands(update, context, name)
+        # finally:
+        #     await self.update_commands(update, context, name)
             
     async def get_prompts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.user_update(update,context)
@@ -2206,7 +2207,13 @@ class ChatGPTTelegramBot:
             await self.send_message_with_signature(update, "You are not allowed to view prompts.")
             return
         prompts = self.usage[user_id].get_prompts()
-        await self.send_message_with_signature(update, prompts)
+        formatted_prompts = []
+        for name, text in prompts.items():
+            short_text = (text[:60] + "...") if len(text) > 60 else text
+            formatted_prompts.append(f"/{name}: {short_text}")
+
+        prompts_str = "Your saved prompts:\n" + "\n".join(formatted_prompts)
+        await self.send_message_with_signature(update, prompts_str)
 
     def run(self):
         """
