@@ -293,7 +293,7 @@ class ChatGPTTelegramBot:
         #     )
 
         usage_text = text_current_conversation + text_today + text_month + text_budget
-        await update.message.reply_text(usage_text, parse_mode=constants.ParseMode.MARKDOWN)
+        await update.message.reply_text(usage_text, parse_mode=constants.ParseMode.HTML)
 
     async def resend(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
