@@ -29,6 +29,7 @@ from utils import is_group_chat, get_thread_id, message_text, wrap_with_indicato
     cleanup_intermediate_files , is_forbidden
 from openai_helper import OpenAIHelper, default_max_tokens, are_functions_available #, localized_text
 from usage_tracker import UsageTracker
+import re
 
 #Load the .env file
 from dotenv import load_dotenv
@@ -1271,7 +1272,14 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         user_id = update.message.from_user.id
         message_thread_id = update.message.message_thread_id
-        prompt = message_text(update.message)
+        parts = message_text(update.message)
+        command = parts[0]  # "/foo"
+        args = parts[1:]    # ["arg1", "arg2"]
+        if command in self.usage[user_id].get_prompts():
+            prompt_name = command
+            prompt = self.usage[user_id].get_prompts(prompt_name) + '\n' + args
+        else:
+            prompt = message_text(update.message)
         self.last_message[chat_id] = prompt
         if is_group_chat(update):
             await self.handle_group_chat_prompt(update, context, prompt, chat_id, message_thread_id)
@@ -2141,6 +2149,10 @@ class ChatGPTTelegramBot:
             await update.message.reply_text("Usage: /newprompt <name> <system prompt>")
             return
         name = context.args[0]
+        # Validate that name contains only English letters (A-Z, a-z)
+        if not re.fullmatch(r'[A-Za-z]+', name):
+            await update.message.reply_text("Prompt name must contain only English letters (A-Z, a-z), no symbols, numbers, or other languages.")
+            return
         prompt = " ".join(context.args[1:])  # Capture the rest of the arguments as the prompt
         self.logger.info(f"User {user_id} requested to add system prompt:{prompt} by the name: {name}")
 
@@ -2155,7 +2167,6 @@ class ChatGPTTelegramBot:
             await self.send_message_with_signature(update, f"Failed to set the prompt: {e}")
         finally:
             await self.update_commands(update, context, name)
-
     async def delete_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.user_update(update,context)
         user = update.effective_user
@@ -2196,8 +2207,6 @@ class ChatGPTTelegramBot:
         prompts = self.usage[user_id].get_prompts()
         await self.send_message_with_signature(update, prompts)
 
-
-
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
@@ -2209,7 +2218,7 @@ class ChatGPTTelegramBot:
             .post_init(self.post_init) \
             .concurrent_updates(True) \
             .build()
-
+        application.add_handler(MessageHandler(filters.COMMAND, self.prompt))
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
