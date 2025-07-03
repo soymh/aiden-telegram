@@ -961,3 +961,37 @@ class UsageTracker:
         if broadcast_id in self.usage['pending_broadcasts']:
             del self.usage['pending_broadcasts'][broadcast_id]
             self.save_state()
+
+    def new_prompt(self, name: str, prompt: str):
+        """
+        Set a user-defined system prompt with a given name.
+        """
+        if 'prompts' not in self.usage:
+            self.usage['prompts'] = {}
+            self.usage['prompts']['summarize'] = "summarize this text carefully with keeping exact info and meaning"
+        self.usage['prompts'][name] = prompt
+        self.save_state()
+
+    def delete_prompt(self, name: str):
+        """
+        Delete a user-defined system prompt by name.
+        """
+        if 'prompts' in self.usage and name in self.usage['prompts']:
+            del self.usage['prompts'][name]
+            self.save_state()
+
+    def get_prompts(self, name=None):
+        """
+        Get a user-defined system prompt by name.
+        """
+        if name is None:
+            return self.usage.get('prompts', {})
+        else:
+            return self.usage.get('prompts', {}).get(name)
+
+
+    def list_prompts(self):
+        """
+        List all user-defined system prompt names.
+        """
+        return list(self.usage.get('prompts', {}).keys())

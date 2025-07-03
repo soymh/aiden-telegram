@@ -63,7 +63,10 @@
         "loading": "Loading...",
         "function_unavailable_in_inline_mode": "This function is unavailable in inline mode",
         "setconfig_description": "Modify the configs if you have access to.",
-        "dmadmin_description": "Send a direct message to the admin. Rate limited per user."
+        "dmadmin_description": "Send a direct message to the admin. Rate limited per user.",
+        "newprompt_description": "Create a reusable prompt. (e.g. /newprompt summarize Summarize the following text)",
+        "deleteprompt_description": "Delete a reusable prompt.",
+        "getallprompts_description": "Get all configured prompts"
     },
     "fa": {
         "help_description": "نمایش پیام راهنما",

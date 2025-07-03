@@ -80,6 +80,9 @@ class ChatGPTTelegramBot:
             BotCommand(command='dmadmin', description=self.localized_text('dmadmin_description', bot_language))
 
         ]
+        self.commands.append(BotCommand(command='newprompt', description=self.localized_text('newprompt_description', bot_language)))
+        self.commands.append(BotCommand(command='delprompt', description=self.localized_text('deleteprompt_description', bot_language)))
+        self.commands.append(BotCommand(command='getprompts', description=self.localized_text('getallprompts_description', bot_language)))
         # If imaging is enabled, add the "image" command to the list
         if self.config.get('enable_image_generation', False):
             self.commands.append(BotCommand(command='image', description=self.localized_text('image_description', bot_language)))
@@ -125,6 +128,9 @@ class ChatGPTTelegramBot:
         self.usage[self.user_id].save_state()
         self.conversations = self.usage[self.user_id].do_conversations(chat_id=chat_id)
         dummy, self.bot_language = self.usage[self.user_id].retrieve_config_value('telegram','bot_language')
+        for name, prompt in self.usage[user.id].get_prompts().items():
+            self.commands.append(BotCommand(command=name, description=prompt))
+        await context.bot.set_my_commands(self.commands)
 
     def create_user_logger(self, user_id):
         # Create a logger for the user if it doesn't exist
@@ -861,7 +867,7 @@ class ChatGPTTelegramBot:
                         try:
                             use_markdown = tokens != 'not_finished'
                             await edit_message_with_retry(context, chat_id, str(sent_message.message_id),
-                                                        text=content, markdown=use_markdown)
+                                                          text=content, markdown=use_markdown)
 
                         except RetryAfter as e:
                             backoff += 5
@@ -2113,6 +2119,84 @@ class ChatGPTTelegramBot:
             return True
             
         return False
+    
+    async def update_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE, name:str):
+        await self.user_update(update,context)
+        user = update.effective_user
+        user_id = user.id
+        await self.user_update(update,context)
+        if name in self.usage[user_id].get_prompts():
+            self.logger.info(f"User {user_id} prompts list updated for prompt:{self.usage[user_id].get_prompts(name)} by the name: {name}")
+            self.commands.append(BotCommand(command='newprompt', description=self.usage[user_id].get_prompts(name)))
+            await context.bot.set_my_commands(self.commands)
+        else:
+            self.commands.remove(name)
+
+    async def new_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.user_update(update,context)
+        user = update.effective_user
+        user_id = user.id
+        chat_id = update.effective_chat.id
+        if len(context.args) < 2:
+            await update.message.reply_text("Usage: /newprompt <name> <system prompt>")
+            return
+        name = context.args[0]
+        prompt = " ".join(context.args[1:])  # Capture the rest of the arguments as the prompt
+        self.logger.info(f"User {user_id} requested to add system prompt:{prompt} by the name: {name}")
+
+        if not await is_allowed(self.config, update, context):
+            await self.send_message_with_signature(update, "You are not allowed to set new prompt.")
+            return
+        
+        try:
+            self.usage[user_id].new_prompt(name, prompt)
+            await self.send_message_with_signature(update, f"Your prompt has been set! You can use it using /{name}")
+        except Exception as e:
+            await self.send_message_with_signature(update, f"Failed to set the prompt: {e}")
+        finally:
+            await self.update_commands(update, context, name)
+
+    async def delete_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.user_update(update,context)
+        user = update.effective_user
+        user_id = user.id
+        chat_id = update.effective_chat.id
+
+        if not await is_allowed(self.config, update, context):
+            await self.send_message_with_signature(update, "You are not allowed to delete prompts.")
+            return
+
+        if not context.args:
+            await self.send_message_with_signature(update, "Usage: /deleteprompt <name>")
+            return
+
+        name = context.args[0]
+
+        self.logger.info(f"User {user_id} requested to delete system prompt: {name}")
+
+        try:
+            self.usage[user_id].delete_prompt(name)
+            await self.send_message_with_signature(update, f"Prompt '{name}' has been deleted.")
+        except KeyError:
+            await self.send_message_with_signature(update, f"Prompt '{name}' not found.")
+        except Exception as e:
+            await self.send_message_with_signature(update, f"Failed to delete the prompt: {e}")
+        finally:
+            await self.update_commands(update, context, name)
+            
+    async def get_prompts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.user_update(update,context)
+        user = update.effective_user
+        user_id = user.id
+        chat_id = update.effective_chat.id
+
+        if not await is_allowed(self.config, update, context):
+            await self.send_message_with_signature(update, "You are not allowed to view prompts.")
+            return
+        prompts = self.usage[user_id].get_prompts()
+        await self.send_message_with_signature(update, prompts)
+
+
 
     def run(self):
         """
@@ -2149,6 +2233,10 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler(
             'setconfig', self.config_commands, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE)
         )
+        application.add_handler(CommandHandler('newprompt', self.new_prompt, filters=filters.ChatType.PRIVATE))
+        application.add_handler(CommandHandler('delprompt', self.delete_prompt, filters=filters.ChatType.PRIVATE))
+        application.add_handler(CommandHandler('getprompts', self.get_prompts, filters=filters.ChatType.PRIVATE))
+
         ALL_ATTACHMENTS = (
             filters.Document.ALL
             | filters.PHOTO
