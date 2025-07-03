@@ -1669,7 +1669,7 @@ class ChatGPTTelegramBot:
         )
         deny_button = InlineKeyboardButton(
             "Deny",
-            callback_data=f"admin_deny:{user_id_str}:{username}:{user_fullname}"
+            callback_data=f"admin_deny:{user_id_str}:{username}:{user_fullname}:{chat_id}"
         )
         admin_keyboard = InlineKeyboardMarkup([[approve_button, deny_button]])
         self.logger.info(f"User {user_fullname}:{username} with id:{user_id_str} requested for admin approval.")
