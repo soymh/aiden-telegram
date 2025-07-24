@@ -371,7 +371,7 @@ class ChatGPTTelegramBot:
             try:
                 if os.getenv("FLUX_GEN",'false') == 'true':
                     # Use FLUX API
-                    b64_json, image_size = await self.openai.generate_image_flux(self.user_id, self.username, self.chat_id, prompt=image_query)
+                    b64_json, image_size = await self.openai.generate_image_flux(self.user_id, self.username, prompt=image_query)
                     # Decode the base64 JSON to get the image data
                     image_data = base64.b64decode(b64_json)
                     image_bytes = BytesIO(image_data)
