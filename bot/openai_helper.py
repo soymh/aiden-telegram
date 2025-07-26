@@ -384,6 +384,7 @@ class OpenAIHelper:
 
             if self.config['enable_functions'] and not self.conversations_vision[str(self.chat_id)]:
                 functions = self.plugin_manager.get_functions_specs()
+                self.logger.info(f'-------------------------------------functions are:{functions}---------------------------------------')
                 if len(functions) > 0:
                     common_args['tools'] = self.plugin_manager.get_functions_specs()
                     common_args['tool_choice'] = 'auto'
