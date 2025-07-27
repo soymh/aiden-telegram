@@ -8,6 +8,8 @@ from io import BytesIO
 import json
 import base64
 from datetime import datetime
+from flask import Flask, request, jsonify
+from threading import Thread
 
 from uuid import uuid4
 from telegram import BotCommandScopeAllGroupChats, Update, constants , InputMediaPhoto
@@ -59,6 +61,7 @@ class ChatGPTTelegramBot:
         #     if os.path.isfile(os.path.join(users_directory, filename)) and filename.lower().endswith('.json')
         # ]
         self.user_id = int()
+        self.logger = self.create_user_logger(self.user_id)
         self.username = ""
         self.chat_id = int()
         self.usage = {}
@@ -102,7 +105,228 @@ class ChatGPTTelegramBot:
         self.last_message = {}
         self.inline_queries_cache = {}
 
+        # Initialize Flask app for API endpoint
+        self.api_app = Flask(__name__)
+        self.api_key = os.environ.get('API_KEY',"YOUR_SECURE_API_KEY_HERE") # Securely get API key from environment variables
+        if not self.api_key:
+            self.logger.error("API_KEY environment variable not set. API endpoint will not be secure.")
+
+        self.telegram_application = None # To store the Application instance
+        self.telegram_loop = None
+        self.setup_api_routes() # Call method to set up API routes
+    def setup_api_routes(self):
+        @self.api_app.route('/api/send_message', methods=['POST'])
+        async def send_message_api():
+            self.logger.info(f"API request received from {request.remote_addr}")
+            self.logger.info(f"Request Headers: {request.headers}")
+            self.logger.info(f"Raw Request Data: {request.data.decode('utf-8')}")
+
+            if request.headers.get('X-API-Key') != self.api_key:
+                self.logger.warning(f"Unauthorized API access attempt from {request.remote_addr}")
+                return jsonify({"error": "Unauthorized"}), 401
+
+            try:
+                data = request.json
+                if not data:
+                    self.logger.warning("Request body is empty or not valid JSON after parsing.")
+                    return jsonify({"error": "Invalid JSON or empty body"}), 400
+
+                user_id = data.get('user_id')
+                message_type = data.get('message_type', 'text')
+                content = data.get('content')
+                caption = data.get('caption', '')
+                reply_to_message_id = data.get('reply_to_message_id')
+                chat_id = data.get('chat_id', user_id)
+
+                if not user_id or not content:
+                    self.logger.warning(f"Missing user_id or content in API payload: {data}")
+                    return jsonify({"error": "Missing user_id or content"}), 400
+
+                if not self.telegram_application or not self.telegram_loop:
+                    self.logger.error("Telegram Application or Event Loop not initialized for API.")
+                    return jsonify({"error": "Bot not fully initialized"}), 500
+
+                bot = self.telegram_application.bot
+                self.logger.info(f"Successfully retrieved bot instance from telegram_application.")
+
+                # Define the async operation to be run on the main loop
+                async def send_telegram_message():
+                    if message_type == 'text':
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=content,
+                            reply_to_message_id=reply_to_message_id
+                        )
+                    elif message_type == 'photo':
+                        if content.startswith(('http://', 'https://')):
+                            await bot.send_photo(
+                                chat_id=chat_id,
+                                photo=content,
+                                caption=caption,
+                                reply_to_message_id=reply_to_message_id
+                            )
+                        else:
+                            img_bytes = BytesIO(base64.b64decode(content))
+                            img_bytes.name = 'image.png'
+                            await bot.send_photo(
+                                chat_id=chat_id,
+                                photo=img_bytes,
+                                caption=caption,
+                                reply_to_message_id=reply_to_message_id
+                            )
+                    elif message_type == 'voice':
+                        voice_bytes = BytesIO(base64.b64decode(content))
+                        voice_bytes.name = 'voice.ogg'
+                        await bot.send_voice(
+                            chat_id=chat_id,
+                            voice=voice_bytes,
+                            caption=caption,
+                            reply_to_message_id=reply_to_message_id
+                        )
+                    elif message_type == 'document':
+                        document_bytes = BytesIO(base64.b64decode(content))
+                        document_name = data.get('file_name', 'document.bin')
+                        document_bytes.name = document_name
+                        await bot.send_document(
+                            chat_id=chat_id,
+                            document=document_bytes,
+                            caption=caption,
+                            reply_to_message_id=reply_to_message_id
+                        )
+                    elif message_type == 'direct_result':
+                        self.logger.info(f"Received direct_result via API for user {user_id}. Sending as text for now.")
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"Direct Result (API): {content}",
+                            reply_to_message_id=reply_to_message_id
+                        )
+                    else:
+                        raise ValueError("Unsupported message_type")
+
+                # Use run_coroutine_threadsafe to schedule the send operation on the main bot's loop
+                future = asyncio.run_coroutine_threadsafe(send_telegram_message(), self.telegram_loop)
+                future.result(timeout=10) # Wait for the operation to complete, with a timeout
+
+                self.logger.info(f"API message sent to user {user_id} of type {message_type}")
+                return jsonify({"status": "Message sent successfully"}), 200
+
+            except concurrent.futures.TimeoutError:
+                self.logger.error(f"API message sending timed out for user {user_id}.")
+                return jsonify({"error": "Message sending timed out"}), 504
+            except ValueError as ve:
+                self.logger.error(f"API message sending failed due to invalid value: {ve}", exc_info=True)
+                return jsonify({"error": str(ve)}), 400
+            except Exception as e:
+                self.logger.error(f"Error parsing JSON or during message sending: {e}", exc_info=True)
+                return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
+
+
+    def setup_api_routes(self):
+        @self.api_app.route('/api/send_message', methods=['POST'])
+        async def send_message_api():
+            self.logger.info(f"API request received from {request.remote_addr}")
+            self.logger.info(f"Request Headers: {request.headers}")
+            # --- ADD THIS LINE TO LOG THE RAW REQUEST BODY ---
+            self.logger.info(f"Raw Request Data: {request.data.decode('utf-8')}") # Decode to see text, if binary
+
+            # API Key Authentication
+            if request.headers.get('X-API-Key') != self.api_key:
+                self.logger.warning(f"Unauthorized API access attempt from {request.remote_addr}")
+                return jsonify({"error": "Unauthorized"}), 401
+
+            try:
+                data = request.json
+                if not data:
+                    self.logger.warning("Request body is empty or not valid JSON after parsing.")
+                    return jsonify({"error": "Invalid JSON or empty body"}), 400
+
+                user_id = data.get('user_id')
+                message_type = data.get('message_type', 'text')
+                content = data.get('content')
+                caption = data.get('caption', '')
+                reply_to_message_id = data.get('reply_to_message_id')
+                chat_id = data.get('chat_id', user_id)
+
+                if not user_id or not content:
+                    self.logger.warning(f"Missing user_id or content in API payload: {data}")
+                    return jsonify({"error": "Missing user_id or content"}), 400
+
+                if not self.telegram_application:
+                    self.logger.error("Telegram Application not initialized for API.")
+                    return jsonify({"error": "Bot not fully initialized"}), 500
+
+                bot = self.telegram_application.bot
+
+                if message_type == 'text':
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=content,
+                        reply_to_message_id=reply_to_message_id
+                    )
+                elif message_type == 'photo':
+                    # Content can be a URL or base64 encoded image
+                    if content.startswith(('http://', 'https://')):
+                        await bot.send_photo(
+                            chat_id=chat_id,
+                            photo=content,
+                            caption=caption,
+                            reply_to_message_id=reply_to_message_id
+                        )
+                    else:
+                        # Assume base64 encoded image
+                        img_bytes = BytesIO(base64.b64decode(content))
+                        img_bytes.name = 'image.png' # Telegram needs a filename for BytesIO
+                        await bot.send_photo(
+                            chat_id=chat_id,
+                            photo=img_bytes,
+                            caption=caption,
+                            reply_to_message_id=reply_to_message_id
+                        )
+                elif message_type == 'voice':
+                    # Assume base64 encoded voice data (e.g., MP3)
+                    voice_bytes = BytesIO(base64.b64decode(content))
+                    voice_bytes.name = 'voice.ogg' # Or .mp3, depends on encoding
+                    await bot.send_voice(
+                        chat_id=chat_id,
+                        voice=voice_bytes,
+                        caption=caption,
+                        reply_to_message_id=reply_to_message_id
+                    )
+                elif message_type == 'document':
+                    # Assume base64 encoded document data
+                    document_bytes = BytesIO(base64.b64decode(content))
+                    document_name = data.get('file_name', 'document.bin')
+                    document_bytes.name = document_name
+                    await bot.send_document(
+                        chat_id=chat_id,
+                        document=document_bytes,
+                        caption=caption,
+                        reply_to_message_id=reply_to_message_id
+                    )
+                elif message_type == 'direct_result':
+                    # This would require more complex integration with your handle_direct_result
+                    # As handle_direct_result expects a Telegram Update object.
+                    # For simplicity, we'll treat direct_result as text for now, or
+                    # you'd need to refactor `handle_direct_result` to accept direct parameters.
+                    # For demonstration, let's just send the content as text for now.
+                    self.logger.info(f"Received direct_result via API for user {user_id}. Sending as text.")
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"Direct Result (API): {content}",
+                        reply_to_message_id=reply_to_message_id
+                    )
+                else:
+                    return jsonify({"error": "Unsupported message_type"}), 400
+
+                self.logger.info(f"API message sent to user {user_id} of type {message_type}")
+                return jsonify({"status": "Message sent successfully"}), 200
+
+            except Exception as e:
+                self.logger.error(f"Error parsing JSON or during message sending: {e}", exc_info=True)
+                return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
+            
         self.logger = self.create_user_logger(self.user_id)
+
     def extract_chat_id(self,update):
         if update.inline_query:
             chat_id = update.inline_query.id
@@ -2287,6 +2511,28 @@ class ChatGPTTelegramBot:
 
         application.add_error_handler(error_handler)
         
+        self.telegram_application = application
+        
+        # Get the current event loop for run_polling before it starts blocking
+        # This loop will be where all Telegram bot operations run
+        self.telegram_loop = asyncio.get_event_loop()
+        self.logger.info(f"Main Telegram bot event loop captured: {self.telegram_loop}")
 
+        # self.setup_api_routes() 
+        # Run the Flask API in a separate thread to not block the Telegram bot polling
+        def run_flask():
+            # Use 0.0.0.0 to make it accessible from outside the container/localhost
+            self.logger.info("Starting Flask API server thread.")
+            self.api_app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+            self.logger.info("Flask API server thread exited.")
 
+        # Start Flask in a new thread
+        flask_thread = Thread(target=run_flask)
+        flask_thread.daemon = True # Allow the main program to exit even if the thread is still running
+        flask_thread.start()
+        self.logger.info("Flask API server started on port 5000")
+
+        # Start the Telegram bot polling
+        self.logger.info("Telegram bot polling started")
         application.run_polling()
+        self.logger.info("Telegram bot polling stopped.")

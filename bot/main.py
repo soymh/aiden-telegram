@@ -1,8 +1,8 @@
 import logging
 import os
-import threading
-from flask import Flask
-import requests
+# import threading
+# from flask import Flask
+# import requests
 from dotenv import load_dotenv
 
 from plugin_manager import PluginManager
@@ -13,27 +13,27 @@ from usage_tracker import UsageTracker
 
 import asyncio
 
-app = Flask(__name__)
+# app = Flask(__name__)
 
-# This route will be used to keep the bot alive
-@app.route('/')
-def index():
-    return 'Bot is alive!'
+# # This route will be used to keep the bot alive
+# @app.route('/')
+# def index():
+#     return 'Bot is alive!'
 
 
-def keep_alive():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-    while True:
-        try:
-            response = requests.get(f"{os.environ.get('BOT_URL', 'http://localhost:5000')}")
-            if response.status_code == 200:
-                print("Bot is alive.")
-            else:
-                print(f"Unexpected response status: {response.status_code}")
-        except Exception as error:
-            print(f"Failed to maintain bot activity: {error}")
-        import time
-        time.sleep(300)
+# def keep_alive():
+#     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+#     while True:
+#         try:
+#             response = requests.get(f"{os.environ.get('BOT_URL', 'http://localhost:5000')}")
+#             if response.status_code == 200:
+#                 print("Bot is alive.")
+#             else:
+#                 print(f"Unexpected response status: {response.status_code}")
+#         except Exception as error:
+#             print(f"Failed to maintain bot activity: {error}")
+#         import time
+#         time.sleep(300)
 
 
 async def async_setup():
@@ -92,7 +92,7 @@ async def async_setup():
     telegram_bot = ChatGPTTelegramBot(openai=openai_helper)
 
     # Start Flask server in a separate thread
-    threading.Thread(target=keep_alive, daemon=True).start()
+    # threading.Thread(target=keep_alive, daemon=True).start()
 
     return telegram_bot
 

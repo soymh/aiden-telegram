@@ -22,5 +22,7 @@ wikipedia==1.4.0
 flask
 yt-dlp>=2024.03.10
 ffmpeg-python>=0.2.0
-
 httpx>=0.25.0
+pydantic>=2.6.0
+aiohttp>=3.9.0
+pyyaml>=6.0.0
