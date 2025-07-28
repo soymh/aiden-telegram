@@ -574,19 +574,27 @@ class UsageTracker:
         image_cost = image_prices[requested_size]
         today = date.today()
         self.add_current_costs(float(image_cost))
-
+        # First, load current data from file.
+        current_usage = {}
+        
+        if os.path.isfile(self.user_file):
+            try:
+                with open(self.user_file, "r") as infile:
+                    current_usage = json.load(infile)
+            except Exception as e:
+                logging.warning(f"Error reading usage file: {e}")
         # update usage_history
-        if "number_images" in self.usage["usage_history"][str(today)]:
+        if "number_images" in current_usage["usage_history"][str(today)]:
             # add token usage to existing date
-            self.usage["usage_history"][str(today)]["number_images"][requested_size] += 1
+            current_usage["usage_history"][str(today)]["number_images"][requested_size] += 1
         else:
             # create new entry for current date
-            self.usage["usage_history"][str(today)]["number_images"] = [0, 0, 0]
-            self.usage["usage_history"][str(today)]["number_images"][requested_size] += 1
+            current_usage["usage_history"][str(today)]["number_images"] = [0, 0, 0]
+            current_usage["usage_history"][str(today)]["number_images"][requested_size] += 1
 
         # write updated image number to user file
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile, indent=4)
+            json.dump(current_usage, outfile, indent=4)
 
     def get_current_image_count(self):
         """Get number of images requested for today and this month.
@@ -616,18 +624,27 @@ class UsageTracker:
         today = date.today()
         token_price = round(tokens * vision_token_price / 1000, 2)
         self.add_current_costs(float(token_price))
-
+        
+        # First, load current data from file.
+        current_usage = {}
+        
+        if os.path.isfile(self.user_file):
+            try:
+                with open(self.user_file, "r") as infile:
+                    current_usage = json.load(infile)
+            except Exception as e:
+                logging.warning(f"Error reading usage file: {e}")
         # update usage_history
         if "vision_tokens" in self.usage["usage_history"][str(today)]:
             # add requested seconds to existing date
-            self.usage["usage_history"][str(today)]["vision_tokens"] += tokens
+            current_usage["usage_history"][str(today)]["vision_tokens"] += tokens
         else:
             # create new entry for current date
-            self.usage["usage_history"][str(today)]["vision_tokens"] = tokens
+            current_usage["usage_history"][str(today)]["vision_tokens"] = tokens
 
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile, indent=4)
+            json.dump(current_usage, outfile, indent=4)
 
     def get_current_vision_tokens(self):
         """Get vision tokens for today and this month.

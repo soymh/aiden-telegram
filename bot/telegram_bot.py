@@ -9,6 +9,7 @@ import json
 import base64
 from datetime import datetime
 from flask import Flask, request, jsonify
+import concurrent.futures
 from threading import Thread
 
 from uuid import uuid4
@@ -246,10 +247,17 @@ class ChatGPTTelegramBot:
                 caption = data.get('caption', '')
                 reply_to_message_id = data.get('reply_to_message_id')
                 chat_id = data.get('chat_id', user_id)
+                file_id = data.get('file_id')
+                prompt = data.get('prompt')
+
 
                 if not user_id or not content:
                     self.logger.warning(f"Missing user_id or content in API payload: {data}")
                     return jsonify({"error": "Missing user_id or content"}), 400
+                if message_type == 'vision':
+                    if not user_id or not file_id:
+                        self.logger.warning(f"Missing user_id or file_id for vision API payload: {data}")
+                        return jsonify({"error": "Missing user_id or file_id for vision"}), 400
 
                 if not self.telegram_application:
                     self.logger.error("Telegram Application not initialized for API.")
@@ -303,6 +311,54 @@ class ChatGPTTelegramBot:
                         caption=caption,
                         reply_to_message_id=reply_to_message_id
                     )
+                elif message_type == 'vision':
+                    # --- NEW: Vision handling ---
+                    if not file_id:
+                        self.logger.warning(f"Missing file_id for vision API payload: {data}")
+                        return jsonify({"error": "Missing file_id for vision"}), 400
+
+                    temp_file_png = io.BytesIO()
+                    try:
+                        media_file = await bot.get_file(file_id)
+                        temp_file_original = io.BytesIO(await media_file.download_as_bytearray())
+                        original_image = Image.open(temp_file_original)
+                        original_image.save(temp_file_png, format='PNG')
+                        self.logger.info(f'API vision request received for user {user_id} with file_id: {file_id}')
+
+                    except Exception as e:
+                        self.logger.exception(e)
+                        return jsonify({"error": f"Failed to download or process image from file_id: {str(e)}"}), 500
+
+                    try:
+                        interpretation, output_tokens = await self.openai.interpret_image(
+                            user_id=user_id, # Use user_id from API payload
+                            username=self.username, # Use bot's username or find a way to pass user's username if available
+                            chat_id=chat_id,
+                            fileobj=temp_file_png,
+                            prompt=prompt
+                        )
+
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=interpretation,
+                            reply_to_message_id=reply_to_message_id
+                        )
+
+                        # Update usage, similar to the vision function
+                        vision_token_price = self.config['vision_token_price']
+                        if user_id not in self.usage:
+                            self.usage[user_id] = UsageTracker(user_id, "API_User") # Placeholder for username
+                        self.usage[user_id].add_vision_tokens(output_tokens, vision_token_price)
+
+                        # Handle guests if applicable
+                        user_ids_list = self.config['user_ids_list'].split(',')
+                        if str(user_id) not in user_ids_list and 'guests' in self.usage:
+                            self.usage["guests"].add_vision_tokens(output_tokens, vision_token_price)
+
+                    except Exception as e:
+                        self.logger.exception(e)
+                        return jsonify({"error": f"Vision interpretation failed: {str(e)}"}), 500
+
                 elif message_type == 'direct_result':
                     # This would require more complex integration with your handle_direct_result
                     # As handle_direct_result expects a Telegram Update object.
@@ -315,6 +371,55 @@ class ChatGPTTelegramBot:
                         text=f"Direct Result (API): {content}",
                         reply_to_message_id=reply_to_message_id
                     )
+
+                    image_file_id = data.get('image_file_id')
+                    vision_prompt = data.get('prompt')
+
+                    if not image_file_id:
+                        self.logger.warning(f"Missing image_base64 for vision request: {data}")
+                        return jsonify({"error": "Missing image_base64 for vision request"}), 400
+
+                    temp_file_png = io.BytesIO()
+                    try:
+                        img_bytes = io.BytesIO(base64.b64decode(image_base64))
+                        original_image = Image.open(img_bytes)
+                        original_image.save(temp_file_png, format='PNG')
+                        temp_file_png.seek(0) # Reset stream position to the beginning
+                    except Exception as e:
+                        self.logger.error(f"Error processing image for vision API: {e}", exc_info=True)
+                        return jsonify({"error": f"Invalid image data or format: {str(e)}"}), 400
+
+                    try:
+                        # Ensure user_id is a string for dict key consistency if needed
+                        user_id_str = str(user_id)
+                        if user_id_str not in self.usage:
+                            # Using a generic name for API users, or you could pass it in the payload
+                            self.usage[user_id_str] = UsageTracker(user_id_str, f"API_User_{user_id_str}")
+
+                        # Interpret image
+                        interpretation, output_tokens = await self.openai.interpret_image(
+                            user_id=user_id_str, # Use the user_id from the API payload
+                            username=self.username, # Use bot's username or a generic one
+                            chat_id=chat_id,
+                            fileobj=temp_file_png,
+                            prompt=vision_prompt
+                        )
+
+                        # Send the interpretation back as a text message
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=interpretation
+                        )
+
+                        # Update usage statistics
+                        vision_token_price = self.config['vision_token_price']
+                        self.usage[user_id_str].add_vision_tokens(output_tokens, vision_token_price)
+                        self.logger.info(f"API vision request processed and message sent to user {user_id}")
+                        return jsonify({"status": "Vision interpretation sent successfully"}), 200
+
+                    except Exception as e:
+                        self.logger.error(f"Error during vision interpretation or sending: {e}", exc_info=True)
+                        return jsonify({"error": f"Vision processing failed: {str(e)}"}), 500
                 else:
                     return jsonify({"error": "Unsupported message_type"}), 400
 
@@ -324,7 +429,7 @@ class ChatGPTTelegramBot:
             except Exception as e:
                 self.logger.error(f"Error parsing JSON or during message sending: {e}", exc_info=True)
                 return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
-            
+
         self.logger = self.create_user_logger(self.user_id)
 
     def extract_chat_id(self,update):
@@ -1216,8 +1321,8 @@ class ChatGPTTelegramBot:
         )
         
         # Call the common reply-checking logic.
-        # Note: process_reply_logic returns the updated prompt and a flag (handled) if processing was already done.
-        prompt, handled = await self.process_reply_logic(
+        # Note: process_message_content returns the updated prompt and a flag (handled) if processing was already done.
+        prompt, handled = await self.process_message_content(
             update, context, prompt, chat_id, original_prompt=prompt, is_group=True, super_access=True
         )
         if handled:
@@ -1232,7 +1337,7 @@ class ChatGPTTelegramBot:
                 f"`message_thread_id={message_thread_id} group_id={group_id}`, Answer their request.NOTHING MORE!"
             )
         else:
-            # A reply exists but process_reply_logic did not handle it.
+            # A reply exists but process_message_content did not handle it.
             reply = update.effective_message.reply_to_message
             if reply.text:
                 self.logger.info(f"by replying to the text: {reply.text}")
@@ -1278,10 +1383,11 @@ class ChatGPTTelegramBot:
                 prompt = prompt[len("/chat") :].strip()
 
             # Process reply logic (if the message is a reply to another message)
-            prompt, handled = await self.process_reply_logic(update, context, prompt, chat_id, original_prompt=prompt, is_group=True)
+            prompt, handled = await self.process_message_content(update, context, prompt, chat_id, original_prompt=prompt, is_group=True)
             if handled:
                 return
-            self.logger.info("No forwarding/reply information from another source or channel detected.")
+                  
+            self.logger.info("No forwarding/reply/attachment information from another source or channel detected.")
             await self.process_openai_response(update, context, prompt, chat_id, role="user")
 
         
@@ -1292,13 +1398,13 @@ class ChatGPTTelegramBot:
             prompt = f'"{reply_text} {prompt} - and here is additional info:{reply}'
 
             # Process reply logic (if the message is a reply to another message)
-            prompt, handled = await self.process_reply_logic(update, context, prompt, chat_id, original_prompt=prompt, is_group=True)
+            prompt, handled = await self.process_message_content(update, context, prompt, chat_id, original_prompt=prompt, is_group=True)
             if handled:
                 return
-            self.logger.info("No forwarding/reply information from another source or channel detected.")
+            self.logger.info("No forwarding/reply/attachment information from another source or channel detected.")
             await self.process_openai_response(update, context, prompt, chat_id, role="user")
 
-    async def process_reply_logic(
+    async def process_message_content(
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
@@ -1309,66 +1415,115 @@ class ChatGPTTelegramBot:
         super_access=False
     ) -> Tuple[Optional[str], bool]:
         """
-        Handles reply logic for both group and private chats.
+        Unified processing for messages that may be replies, forwarded, or
+        have attachments (files/photos/voices/etc). Extracts and combines
+        all relevant info to build an enriched prompt.
 
-        Returns a tuple:
-        - The (possibly updated) prompt (or None if response was already sent)
-        - A boolean flag indicating whether processing has been handled (and so the caller should return immediately)
+        Returns:
+        - updated prompt (or None if response was sent already),
+        - boolean indicating whether processing should halt.
         """
-        reply = update.effective_message.reply_to_message
-        if not reply:
-            return prompt, False
 
-        # In group chats, check both text and caption; in private chats, just text.
-        reply_text = reply.text if reply.text else (reply.caption if hasattr(reply, "caption") else "")
-        if not reply_text:
-            return prompt, False
+        message = update.effective_message
 
-        # If the reply is to the bot itself:
-        if reply.from_user and reply.from_user.id == context.bot.id:
-            self.logger.info(f"{'Group' if is_group else 'Private'} message:{reply_text} is a reply to the Bot itself")
-            # Use original_prompt if provided (for private chat) or the current prompt.
-            return f'"{reply_text} {original_prompt or prompt} - and here is additional info:{reply}', False
+        # First, handle replies if any:
+        reply = message.reply_to_message
+        if reply:
+            # Extract reply text or caption
+            reply_text = reply.text if reply.text else (reply.caption if hasattr(reply, "caption") else "")
+            
+            if reply_text:
+                # If reply is to the bot itself:
+                if reply.from_user and reply.from_user.id == context.bot.id:
+                    self.logger.info(f"{'Group' if is_group else 'Private'} message:{reply_text} is a reply to the Bot itself")
+                    new_prompt = f'"{reply_text} {original_prompt or prompt} - and here is additional info:{reply}'
+                    return new_prompt, False
 
-        # For group chats, if the reply comes from a forwarded source with chat details:
-        if is_group and hasattr(reply, "chat") and reply.chat.first_name and reply.chat.username and not hasattr(reply, "api_kwargs"):
-            self.logger.info(
-                f"User replied to a forwarded message from another source: "
-                f"name: {reply.chat.first_name}, username: {reply.chat.username}"
-            )
-            new_prompt = (
-                f"User replied to a forwarded Telegram message containing the text: `{reply_text}` with extra information: {reply} "
-                f"Using these information, Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
-            )
-            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
-            await self.process_openai_response(update, context, prompt, chat_id, role="user",super_access=super_access)
-            return None, True
+                # For group chats, if reply comes from forwarded source with chat details:
+                if is_group and hasattr(reply, "chat") and reply.chat.first_name and reply.chat.username and not hasattr(reply, "api_kwargs"):
+                    self.logger.info(
+                        f"User replied to a forwarded message from another source: "
+                        f"name: {reply.chat.first_name}, username: {reply.chat.username}"
+                    )
+                    new_prompt = (
+                        f"User replied to a forwarded Telegram message containing the text: `{reply_text}` with extra information: {reply} "
+                        f"Using these information, Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
+                    )
+                    self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
+                    await self.process_openai_response(update, context, prompt, chat_id, role="user", super_access=super_access)
+                    return None, True
 
-        # If the reply message includes api_kwargs (likely forwarded from a channel)
-        if hasattr(reply, "api_kwargs") and "forward_from_chat" in reply.api_kwargs:
-            forward_from = reply.api_kwargs["forward_from_chat"]
-            # forward_from might be a dict with a username or just a username string
-            channel_username = (
-                forward_from.get("username") if isinstance(forward_from, dict) and forward_from.get("username") else forward_from
-            )
-            original_message_id = reply.api_kwargs.get("forward_from_message_id", "")
-            self.logger.info(
-                f"User replied to a forwarded message from another channel: {channel_username} with the message id: {original_message_id}"
-            )
-            new_prompt = (
-                f"User replied to a forwarded Telegram message containing the text: `{reply_text}` with extra information: {reply} "
-                f"and the prompt: {prompt}. Using these information and the link: Telegram_link=https://t.me/{channel_username}/{original_message_id} "
-                f"(Recommended to use your tools to get more complete info), Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
-            )
-            self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
-            await self.process_openai_response(update, context, prompt, chat_id, role="user", super_access=super_access)
-            return None, True
+                # If the reply message includes api_kwargs (likely forwarded from a channel)
+                if hasattr(reply, "api_kwargs") and "forward_from_chat" in reply.api_kwargs:
+                    forward_from = reply.api_kwargs["forward_from_chat"]
+                    channel_username = (
+                        forward_from.get("username") if isinstance(forward_from, dict) and forward_from.get("username") else forward_from
+                    )
+                    original_message_id = reply.api_kwargs.get("forward_from_message_id", "")
+                    self.logger.info(
+                        f"User replied to a forwarded message from another channel: {channel_username} with the message id: {original_message_id}"
+                    )
+                    new_prompt = (
+                        f"User replied to a forwarded Telegram message containing the text: `{reply_text}` with extra information: {reply} "
+                        f"and the prompt: {prompt}. Using these information and the link: Telegram_link=https://t.me/{channel_username}/{original_message_id} "
+                        f"(Recommended to use your tools to get more complete info), Answer their request EXACTLY AS THEY INSTRUCT. NOTHING MORE!"
+                    )
+                    self.openai.add_to_history(self.user_id, self.username, chat_id, "system", new_prompt)
+                    await self.process_openai_response(update, context, prompt, chat_id, role="user", super_access=super_access)
+                    return None, True
 
-        # Default: prepend the reply text to the prompt.
-        return f'"{reply_text} {original_prompt or prompt}', False
+                # Default reply handling — prepend reply text to prompt
+                updated_prompt = f'"{reply_text} {original_prompt or prompt}'
+                return updated_prompt, False
 
+            # If reply has no text or caption, continue to check attachments on the original message
 
+        # If no reply or reply text absent, handle attachments of the current message:
+        attachments_info = []
+        attachments_info.append(f"UserID (user_id: {update.effective_user.id})")
+        if message.photo:
+            photo = message.photo[-1]
+            attachments_info.append(f"Photo (file_id: {photo.file_id})")
+        if message.document:
+            attachments_info.append(f"Document (filename: {message.document.file_name or 'unknown'}, file_id: {message.document.file_id})")
+        if message.audio:
+            attachments_info.append(f"Audio (title: {message.audio.title or 'unknown'}, file_id: {message.audio.file_id})")
+        if message.video:
+            attachments_info.append(f"Video (file_id: {message.video.file_id})")
+        if message.voice:
+            attachments_info.append(f"Voice message (file_id: {message.voice.file_id})")
+        if message.animation:
+            attachments_info.append(f"Animation (file_id: {message.animation.file_id})")
+        if message.sticker:
+            attachments_info.append(f"Sticker (emoji: {message.sticker.emoji or 'unknown'})")
 
+        attachments_text = ", ".join(attachments_info) if attachments_info else ""
+
+        new_prompt_parts = []
+        if attachments_text:
+            new_prompt_parts.append(f"Attached media: [{attachments_text}]")
+
+        # if message.forward_from:
+        #     user = message.forward_from
+        #     fwd_user_str = f"Forwarded from user: {user.first_name or ''} {user.username or ''}".strip()
+        #     new_prompt_parts.append(fwd_user_str)
+        # elif message.forward_from_chat:
+        #     fchat = message.forward_from_chat
+        #     fwd_chat_str = f"Forwarded from chat: {fchat.title or ''} ({fchat.username or ''})".strip()
+        #     new_prompt_parts.append(fwd_chat_str)
+
+        if message.caption:
+            new_prompt_parts.append(f"Caption text: '{message.caption}'")
+        elif message.text:
+            new_prompt_parts.append(f"Text: '{message.text}'")
+
+        if new_prompt_parts:
+            additional_info = " | ".join(new_prompt_parts)
+            updated_prompt = f'"{additional_info} {original_prompt or prompt}'
+            return updated_prompt, False
+
+        # No reply text, no attachments, no forwarded info — return original prompt
+        return prompt, False
 
 
     async def handle_private_chat_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, chat_id: int):
@@ -1382,12 +1537,11 @@ class ChatGPTTelegramBot:
         elif prompt.lower().startswith(mod_trigger_keyword.lower()):
             await self.handle_moderation_request(update, context, prompt, chat_id, 0, chat_id)  # Using 0 as message_thread_id for private chats
         else:
-            # Process reply logic
-            prompt, handled = await self.process_reply_logic(update, context, prompt, chat_id, original_prompt=original_prompt, is_group=False)
+            prompt, handled = await self.process_message_content(update, context, prompt, chat_id, original_prompt=original_prompt, is_group=False)
             if handled:
                 return
-
-            self.logger.info("No forwarding/reply information from another source or channel detected.")
+            
+            self.logger.info("No forwarding/reply/attachment information from another source or channel detected.")
             await self.process_openai_response(update, context, prompt, chat_id, role="user")
 
 
@@ -1495,7 +1649,7 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         user_id = update.message.from_user.id
         message_thread_id = update.message.message_thread_id
-        text = update.message.text
+        text = update.message.text if update.message.text else "None"
         parts = text.split()
         command = parts[0].lstrip('/')
         args = parts[1:]
@@ -2487,15 +2641,15 @@ class ChatGPTTelegramBot:
 )
 
         application.add_handler(MessageHandler(ALL_ATTACHMENTS & filters.CaptionRegex(r"^/dmadmin\b"),self.dmadmin,),group=0)
-        application.add_handler(MessageHandler(
-            ( filters.PHOTO | filters.Document.IMAGE ) & ~filters.CaptionRegex(r"^/dmadmin\b"),
-            self.vision), group=1)
+        # application.add_handler(MessageHandler(
+        #     ( filters.PHOTO | filters.Document.IMAGE ) & ~filters.CaptionRegex(r"^/dmadmin\b"),
+        #     self.vision), group=1)
         application.add_handler(MessageHandler(
             filters.AUDIO | filters.VOICE | filters.Document.AUDIO |
             filters.VIDEO | filters.VIDEO_NOTE | filters.Document.VIDEO,
             self.transcribe))
         
-        application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.prompt))
+        application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.TEXT & (~filters.COMMAND), self.prompt))
         application.add_handler(InlineQueryHandler(self.inline_query, chat_types=[
             constants.ChatType.GROUP, constants.ChatType.SUPERGROUP, constants.ChatType.PRIVATE
         ]))
