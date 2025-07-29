@@ -9,7 +9,7 @@ import json
 import base64
 from datetime import datetime
 from flask import Flask, request, jsonify
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
 from uuid import uuid4
@@ -108,127 +108,20 @@ class ChatGPTTelegramBot:
 
         # Initialize Flask app for API endpoint
         self.api_app = Flask(__name__)
-        self.api_key = os.environ.get('API_KEY',"YOUR_SECURE_API_KEY_HERE") # Securely get API key from environment variables
+        self.api_key = os.environ.get('API_KEY',"bfb59390-0fdb-4f80-8986-10cb0c31c090") # Securely get API key from environment variables
         if not self.api_key:
             self.logger.error("API_KEY environment variable not set. API endpoint will not be secure.")
 
         self.telegram_application = None # To store the Application instance
         self.telegram_loop = None
         self.setup_api_routes() # Call method to set up API routes
+            
     def setup_api_routes(self):
         @self.api_app.route('/api/send_message', methods=['POST'])
-        async def send_message_api():
+        def send_message_api():
             self.logger.info(f"API request received from {request.remote_addr}")
             self.logger.info(f"Request Headers: {request.headers}")
-            self.logger.info(f"Raw Request Data: {request.data.decode('utf-8')}")
-
-            if request.headers.get('X-API-Key') != self.api_key:
-                self.logger.warning(f"Unauthorized API access attempt from {request.remote_addr}")
-                return jsonify({"error": "Unauthorized"}), 401
-
-            try:
-                data = request.json
-                if not data:
-                    self.logger.warning("Request body is empty or not valid JSON after parsing.")
-                    return jsonify({"error": "Invalid JSON or empty body"}), 400
-
-                user_id = data.get('user_id')
-                message_type = data.get('message_type', 'text')
-                content = data.get('content')
-                caption = data.get('caption', '')
-                reply_to_message_id = data.get('reply_to_message_id')
-                chat_id = data.get('chat_id', user_id)
-
-                if not user_id or not content:
-                    self.logger.warning(f"Missing user_id or content in API payload: {data}")
-                    return jsonify({"error": "Missing user_id or content"}), 400
-
-                if not self.telegram_application or not self.telegram_loop:
-                    self.logger.error("Telegram Application or Event Loop not initialized for API.")
-                    return jsonify({"error": "Bot not fully initialized"}), 500
-
-                bot = self.telegram_application.bot
-                self.logger.info(f"Successfully retrieved bot instance from telegram_application.")
-
-                # Define the async operation to be run on the main loop
-                async def send_telegram_message():
-                    if message_type == 'text':
-                        await bot.send_message(
-                            chat_id=chat_id,
-                            text=content,
-                            reply_to_message_id=reply_to_message_id
-                        )
-                    elif message_type == 'photo':
-                        if content.startswith(('http://', 'https://')):
-                            await bot.send_photo(
-                                chat_id=chat_id,
-                                photo=content,
-                                caption=caption,
-                                reply_to_message_id=reply_to_message_id
-                            )
-                        else:
-                            img_bytes = BytesIO(base64.b64decode(content))
-                            img_bytes.name = 'image.png'
-                            await bot.send_photo(
-                                chat_id=chat_id,
-                                photo=img_bytes,
-                                caption=caption,
-                                reply_to_message_id=reply_to_message_id
-                            )
-                    elif message_type == 'voice':
-                        voice_bytes = BytesIO(base64.b64decode(content))
-                        voice_bytes.name = 'voice.ogg'
-                        await bot.send_voice(
-                            chat_id=chat_id,
-                            voice=voice_bytes,
-                            caption=caption,
-                            reply_to_message_id=reply_to_message_id
-                        )
-                    elif message_type == 'document':
-                        document_bytes = BytesIO(base64.b64decode(content))
-                        document_name = data.get('file_name', 'document.bin')
-                        document_bytes.name = document_name
-                        await bot.send_document(
-                            chat_id=chat_id,
-                            document=document_bytes,
-                            caption=caption,
-                            reply_to_message_id=reply_to_message_id
-                        )
-                    elif message_type == 'direct_result':
-                        self.logger.info(f"Received direct_result via API for user {user_id}. Sending as text for now.")
-                        await bot.send_message(
-                            chat_id=chat_id,
-                            text=f"Direct Result (API): {content}",
-                            reply_to_message_id=reply_to_message_id
-                        )
-                    else:
-                        raise ValueError("Unsupported message_type")
-
-                # Use run_coroutine_threadsafe to schedule the send operation on the main bot's loop
-                future = asyncio.run_coroutine_threadsafe(send_telegram_message(), self.telegram_loop)
-                future.result(timeout=10) # Wait for the operation to complete, with a timeout
-
-                self.logger.info(f"API message sent to user {user_id} of type {message_type}")
-                return jsonify({"status": "Message sent successfully"}), 200
-
-            except concurrent.futures.TimeoutError:
-                self.logger.error(f"API message sending timed out for user {user_id}.")
-                return jsonify({"error": "Message sending timed out"}), 504
-            except ValueError as ve:
-                self.logger.error(f"API message sending failed due to invalid value: {ve}", exc_info=True)
-                return jsonify({"error": str(ve)}), 400
-            except Exception as e:
-                self.logger.error(f"Error parsing JSON or during message sending: {e}", exc_info=True)
-                return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
-
-
-    def setup_api_routes(self):
-        @self.api_app.route('/api/send_message', methods=['POST'])
-        async def send_message_api():
-            self.logger.info(f"API request received from {request.remote_addr}")
-            self.logger.info(f"Request Headers: {request.headers}")
-            # --- ADD THIS LINE TO LOG THE RAW REQUEST BODY ---
-            self.logger.info(f"Raw Request Data: {request.data.decode('utf-8')}") # Decode to see text, if binary
+            self.logger.info(f"Raw Request Data: {request.data.decode('utf-8')}")  # Decode to see text, if binary
 
             # API Key Authentication
             if request.headers.get('X-API-Key') != self.api_key:
@@ -242,6 +135,7 @@ class ChatGPTTelegramBot:
                     return jsonify({"error": "Invalid JSON or empty body"}), 400
 
                 user_id = data.get('user_id')
+                username = data.get('username', user_id)
                 message_type = data.get('message_type', 'text')
                 content = data.get('content')
                 caption = data.get('caption', '')
@@ -250,12 +144,11 @@ class ChatGPTTelegramBot:
                 file_id = data.get('file_id')
                 prompt = data.get('prompt')
 
-
-                if not user_id or not content:
+                if not user_id or (message_type != 'photo' and not content and message_type != 'vision'):
                     self.logger.warning(f"Missing user_id or content in API payload: {data}")
                     return jsonify({"error": "Missing user_id or content"}), 400
                 if message_type == 'vision':
-                    if not user_id or not file_id:
+                    if not user_id or not username or not file_id:
                         self.logger.warning(f"Missing user_id or file_id for vision API payload: {data}")
                         return jsonify({"error": "Missing user_id or file_id for vision"}), 400
 
@@ -265,165 +158,169 @@ class ChatGPTTelegramBot:
 
                 bot = self.telegram_application.bot
 
+                def handle_telegram_api_error(future):
+                    try:
+                        exc = future.exception()
+                        if exc:
+                            self.logger.error(f"Error sending message via Telegram API: {exc}", exc_info=True)
+                    except Exception as e:
+                        self.logger.error(f"Exception in handle_telegram_api_error callback: {e}", exc_info=True)
+
+                # Helper to run coroutine thread-safe, wait synchronously (with timeout)
+                def run_on_bot_loop(coro):
+                    future = asyncio.run_coroutine_threadsafe(coro, self.telegram_loop)
+                    try:
+                        result = future.result(timeout=20)  # Wait up to 20 seconds
+                        return result
+                    except Exception as exc:
+                        self.logger.error(f"Telegram coroutine error or timeout: {exc}", exc_info=True)
+                        raise
+
                 if message_type == 'text':
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=content,
-                        reply_to_message_id=reply_to_message_id
+                    future = asyncio.run_coroutine_threadsafe(
+                        bot.send_message(
+                            chat_id=chat_id,
+                            text=content,
+                            reply_to_message_id=reply_to_message_id
+                        ),
+                        self.telegram_loop
                     )
+                    future.add_done_callback(handle_telegram_api_error)
+                    try:
+                        # Wait synchronously for completion
+                        future.result(timeout=20)
+                    except Exception as e:
+                        return jsonify({"error": f"Telegram send_message failed: {str(e)}"}), 500
+
                 elif message_type == 'photo':
-                    # Content can be a URL or base64 encoded image
-                    if content.startswith(('http://', 'https://')):
-                        await bot.send_photo(
-                            chat_id=chat_id,
-                            photo=content,
-                            caption=caption,
-                            reply_to_message_id=reply_to_message_id
+                    if not file_id:
+                        self.logger.warning("Missing file_id for photo API payload")
+                        return jsonify({"error": "Missing file_id for photo"}), 400
+
+                    try:
+                        media_file = run_on_bot_loop(bot.get_file(file_id))
+                        file_bytes = run_on_bot_loop(media_file.download_as_bytearray())
+                        temp_file_original = io.BytesIO(file_bytes)
+                        original_image = Image.open(temp_file_original)
+                        temp_file_png = io.BytesIO()
+                        original_image.save(temp_file_png, format='PNG')
+                        temp_file_png.seek(0)
+
+                        run_on_bot_loop(
+                            bot.send_photo(
+                                chat_id=chat_id,
+                                photo=temp_file_png,
+                                caption=caption,
+                                reply_to_message_id=reply_to_message_id
+                            )
                         )
-                    else:
-                        # Assume base64 encoded image
-                        img_bytes = BytesIO(base64.b64decode(content))
-                        img_bytes.name = 'image.png' # Telegram needs a filename for BytesIO
-                        await bot.send_photo(
-                            chat_id=chat_id,
-                            photo=img_bytes,
-                            caption=caption,
-                            reply_to_message_id=reply_to_message_id
-                        )
+                    except Exception as e:
+                        self.logger.exception(e)
+                        return jsonify({"error": f"Failed to download or process image from file_id: {str(e)}"}), 500
+
                 elif message_type == 'voice':
-                    # Assume base64 encoded voice data (e.g., MP3)
-                    voice_bytes = BytesIO(base64.b64decode(content))
-                    voice_bytes.name = 'voice.ogg' # Or .mp3, depends on encoding
-                    await bot.send_voice(
-                        chat_id=chat_id,
-                        voice=voice_bytes,
-                        caption=caption,
-                        reply_to_message_id=reply_to_message_id
-                    )
+                    if not file_id:
+                        self.logger.warning("Missing file_id for voice API payload")
+                        return jsonify({"error": "Missing file_id for voice"}), 400
+
+                    try:
+                        media_file = run_on_bot_loop(bot.get_file(file_id))
+                        voice_bytes = io.BytesIO(run_on_bot_loop(media_file.download_as_bytearray()))
+                        voice_bytes.name = 'voice.ogg'
+                        run_on_bot_loop(
+                            bot.send_voice(
+                                chat_id=chat_id,
+                                voice=voice_bytes,
+                                caption=caption,
+                                reply_to_message_id=reply_to_message_id
+                            )
+                        )
+                    except Exception as e:
+                        self.logger.exception(e)
+                        return jsonify({"error": f"Failed to download or process voice from file_id: {str(e)}"}), 500
+
                 elif message_type == 'document':
-                    # Assume base64 encoded document data
-                    document_bytes = BytesIO(base64.b64decode(content))
-                    document_name = data.get('file_name', 'document.bin')
-                    document_bytes.name = document_name
-                    await bot.send_document(
-                        chat_id=chat_id,
-                        document=document_bytes,
-                        caption=caption,
-                        reply_to_message_id=reply_to_message_id
-                    )
+                    if not file_id:
+                        self.logger.warning("Missing file_id for document API payload")
+                        return jsonify({"error": "Missing file_id for document"}), 400
+
+                    try:
+                        media_file = run_on_bot_loop(bot.get_file(file_id))
+                        document_bytes = io.BytesIO(run_on_bot_loop(media_file.download_as_bytearray()))
+                        document_name = data.get('file_name', 'document.bin')
+                        document_bytes.name = document_name
+                        run_on_bot_loop(
+                            bot.send_document(
+                                chat_id=chat_id,
+                                document=document_bytes,
+                                caption=caption,
+                                reply_to_message_id=reply_to_message_id
+                            )
+                        )
+                    except Exception as e:
+                        self.logger.exception(e)
+                        return jsonify({"error": f"Failed to download or process document from file_id: {str(e)}"}), 500
+
                 elif message_type == 'vision':
-                    # --- NEW: Vision handling ---
                     if not file_id:
                         self.logger.warning(f"Missing file_id for vision API payload: {data}")
                         return jsonify({"error": "Missing file_id for vision"}), 400
 
-                    temp_file_png = io.BytesIO()
                     try:
-                        media_file = await bot.get_file(file_id)
-                        temp_file_original = io.BytesIO(await media_file.download_as_bytearray())
+                        media_file = run_on_bot_loop(bot.get_file(file_id))
+                        file_bytes = run_on_bot_loop(media_file.download_as_bytearray())
+                        temp_file_original = io.BytesIO(file_bytes)
                         original_image = Image.open(temp_file_original)
-                        original_image.save(temp_file_png, format='PNG')
-                        self.logger.info(f'API vision request received for user {user_id} with file_id: {file_id}')
 
+                        temp_file_png = io.BytesIO()
+                        original_image.save(temp_file_png, format='PNG')
+                        temp_file_png.seek(0)
+
+                        self.logger.info(f'API vision request received for user {user_id} with file_id: {file_id}')
                     except Exception as e:
                         self.logger.exception(e)
                         return jsonify({"error": f"Failed to download or process image from file_id: {str(e)}"}), 500
 
                     try:
-                        interpretation, output_tokens = await self.openai.interpret_image(
-                            user_id=user_id, # Use user_id from API payload
-                            username=self.username, # Use bot's username or find a way to pass user's username if available
+                        interpretation, output_tokens = self.openai.interpret_image(
+                            user_id=user_id,
+                            username=self.username,
                             chat_id=chat_id,
                             fileobj=temp_file_png,
                             prompt=prompt
                         )
+                        # If openai.interpret_image is async, run synchronously similarly:
+                        if hasattr(interpretation, '__await__'):
+                            interpretation, output_tokens = run_on_bot_loop(
+                                self.openai.interpret_image(
+                                    user_id=user_id,
+                                    username=self.username,
+                                    chat_id=chat_id,
+                                    fileobj=temp_file_png,
+                                    prompt=prompt
+                                )
+                            )
 
-                        await bot.send_message(
-                            chat_id=chat_id,
-                            text=interpretation,
-                            reply_to_message_id=reply_to_message_id
-                        )
-
-                        # Update usage, similar to the vision function
+                        # Update usage counters
                         vision_token_price = self.config['vision_token_price']
                         if user_id not in self.usage:
-                            self.usage[user_id] = UsageTracker(user_id, "API_User") # Placeholder for username
+                            self.usage[user_id] = UsageTracker(user_id, "API_User")
                         self.usage[user_id].add_vision_tokens(output_tokens, vision_token_price)
 
-                        # Handle guests if applicable
                         user_ids_list = self.config['user_ids_list'].split(',')
                         if str(user_id) not in user_ids_list and 'guests' in self.usage:
                             self.usage["guests"].add_vision_tokens(output_tokens, vision_token_price)
 
+                        return jsonify({"answer": str(interpretation)}), 200
                     except Exception as e:
                         self.logger.exception(e)
                         return jsonify({"error": f"Vision interpretation failed: {str(e)}"}), 500
 
-                elif message_type == 'direct_result':
-                    # This would require more complex integration with your handle_direct_result
-                    # As handle_direct_result expects a Telegram Update object.
-                    # For simplicity, we'll treat direct_result as text for now, or
-                    # you'd need to refactor `handle_direct_result` to accept direct parameters.
-                    # For demonstration, let's just send the content as text for now.
-                    self.logger.info(f"Received direct_result via API for user {user_id}. Sending as text.")
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=f"Direct Result (API): {content}",
-                        reply_to_message_id=reply_to_message_id
-                    )
-
-                    image_file_id = data.get('image_file_id')
-                    vision_prompt = data.get('prompt')
-
-                    if not image_file_id:
-                        self.logger.warning(f"Missing image_base64 for vision request: {data}")
-                        return jsonify({"error": "Missing image_base64 for vision request"}), 400
-
-                    temp_file_png = io.BytesIO()
-                    try:
-                        img_bytes = io.BytesIO(base64.b64decode(image_base64))
-                        original_image = Image.open(img_bytes)
-                        original_image.save(temp_file_png, format='PNG')
-                        temp_file_png.seek(0) # Reset stream position to the beginning
-                    except Exception as e:
-                        self.logger.error(f"Error processing image for vision API: {e}", exc_info=True)
-                        return jsonify({"error": f"Invalid image data or format: {str(e)}"}), 400
-
-                    try:
-                        # Ensure user_id is a string for dict key consistency if needed
-                        user_id_str = str(user_id)
-                        if user_id_str not in self.usage:
-                            # Using a generic name for API users, or you could pass it in the payload
-                            self.usage[user_id_str] = UsageTracker(user_id_str, f"API_User_{user_id_str}")
-
-                        # Interpret image
-                        interpretation, output_tokens = await self.openai.interpret_image(
-                            user_id=user_id_str, # Use the user_id from the API payload
-                            username=self.username, # Use bot's username or a generic one
-                            chat_id=chat_id,
-                            fileobj=temp_file_png,
-                            prompt=vision_prompt
-                        )
-
-                        # Send the interpretation back as a text message
-                        await bot.send_message(
-                            chat_id=chat_id,
-                            text=interpretation
-                        )
-
-                        # Update usage statistics
-                        vision_token_price = self.config['vision_token_price']
-                        self.usage[user_id_str].add_vision_tokens(output_tokens, vision_token_price)
-                        self.logger.info(f"API vision request processed and message sent to user {user_id}")
-                        return jsonify({"status": "Vision interpretation sent successfully"}), 200
-
-                    except Exception as e:
-                        self.logger.error(f"Error during vision interpretation or sending: {e}", exc_info=True)
-                        return jsonify({"error": f"Vision processing failed: {str(e)}"}), 500
                 else:
                     return jsonify({"error": "Unsupported message_type"}), 400
 
                 self.logger.info(f"API message sent to user {user_id} of type {message_type}")
+
                 return jsonify({"status": "Message sent successfully"}), 200
 
             except Exception as e:
@@ -776,7 +673,7 @@ class ChatGPTTelegramBot:
 
         async def _generate():
             try:
-                speech_file, text_length = await self.openai.generate_speech(text=tts_query)
+                speech_file, text_length = await self.openai.generate_speech(text=tts_query, user_id=self.user_id, username=self.username, chat_id=self.chat_id,)
 
                 await update.effective_message.reply_voice(
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
@@ -1649,7 +1546,18 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         user_id = update.message.from_user.id
         message_thread_id = update.message.message_thread_id
-        text = update.message.text if update.message.text else "None"
+        def extract_text(update, context):
+            message = update.message
+
+            # Direct message text or forwarded message text
+            text = message.text or message.caption or ""
+
+            # If this message is a reply, you might want to get the replied-to message text
+            if message.reply_to_message:
+                text = message.reply_to_message.text or message.reply_to_message.caption or text
+
+            return text
+        text = extract_text(update, context)
         parts = text.split()
         command = parts[0].lstrip('/')
         args = parts[1:]
@@ -2120,6 +2028,11 @@ class ChatGPTTelegramBot:
         """
         Post initialization hook for the bot.
         """
+        self.telegram_application = application
+        # Capture the running event loop using asyncio.get_running_loop()
+        self.telegram_loop = asyncio.get_running_loop()
+        self.logger.info(f"Main Telegram bot event loop captured in post_init: {self.telegram_loop}")
+
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
     # Helper: generate a formatted table of all users.
@@ -2665,12 +2578,14 @@ class ChatGPTTelegramBot:
 
         application.add_error_handler(error_handler)
         
-        self.telegram_application = application
+        # self.telegram_application = application
         
         # Get the current event loop for run_polling before it starts blocking
         # This loop will be where all Telegram bot operations run
-        self.telegram_loop = asyncio.get_event_loop()
-        self.logger.info(f"Main Telegram bot event loop captured: {self.telegram_loop}")
+        # self.telegram_loop = asyncio.get_event_loop()
+        # self.logger.info(f"Main Telegram bot event loop captured: {self.telegram_loop}")
+        # self.telegram_loop = application.loop
+        # self.logger.info(f"Main Telegram bot event loop captured in run: {self.telegram_loop}")
 
         # self.setup_api_routes() 
         # Run the Flask API in a separate thread to not block the Telegram bot polling

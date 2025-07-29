@@ -25,6 +25,8 @@ from plugins.image_gen import ImageGeneratorPlugin
 from plugins.reddit_helper import RedditHelper
 from plugins.youtube_downloader import YouTubeDownloaderPlugin
 from plugins.media_relay import MediaRelayPlugin
+from plugins.message_plugin import MessagePlugin
+from plugins.vision_plugin import VisionPlugin
 from plugins.mcp_loader import MCPPluginLoader
 
 log = logging.getLogger(__name__)
@@ -82,7 +84,9 @@ class PluginManager:
             'image_gen': ImageGeneratorPlugin,
             'youtube_downloader': YouTubeDownloaderPlugin,
             'reddit_helper': RedditHelper,
-            'media_relay': MediaRelayPlugin
+            'media_relay': MediaRelayPlugin,
+            'message_sender': MessagePlugin,
+            'vision': VisionPlugin
         }
 
         # Initialize built-in plugins

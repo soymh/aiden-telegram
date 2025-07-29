@@ -384,7 +384,7 @@ class OpenAIHelper:
 
             if self.config['enable_functions'] and not self.conversations_vision[str(self.chat_id)]:
                 functions = self.plugin_manager.get_functions_specs()
-                self.logger.info(f'-------------------------------------functions are:{functions}---------------------------------------')
+                # self.logger.info(f'-------------------------------------functions are:{functions}---------------------------------------')
                 if len(functions) > 0:
                     common_args['tools'] = self.plugin_manager.get_functions_specs()
                     common_args['tool_choice'] = 'auto'
@@ -481,7 +481,7 @@ class OpenAIHelper:
         if user_id and username and chat_id:
             self.user_update(user_id, username, chat_id)
         else :
-            self.logger.warning(f"Tool called for image generation")
+            self.logger.warning(f"Tool:Image Generation called for image generation")
         
 
         bot_language = self.config['bot_language']
@@ -573,12 +573,17 @@ class OpenAIHelper:
         except Exception as e:
             raise Exception(f"⚠️ _{self.localized_text('error', bot_language)}._ ⚠️\n{str(e)}") from e
 
-    async def generate_speech(self, text: str) -> tuple[any, int]:
+    async def generate_speech(self, text: str, user_id, username, chat_id,) -> tuple[any, int]:
         """
         Generates an audio from the given text using TTS model.
         :param text: The text to convert to speech
         :return: The audio in bytes and the text size
         """
+        if user_id and username and chat_id:
+            self.user_update(user_id, username, chat_id)
+        else :
+            self.logger.warning(f"Tool:Generate Speech called for image generation")
+
         bot_language = self.config['bot_language']
         try:
             response = await self.media_client.audio.speech.create(
