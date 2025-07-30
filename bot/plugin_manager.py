@@ -28,7 +28,7 @@ from plugins.media_relay import MediaRelayPlugin
 from plugins.message_plugin import MessagePlugin
 from plugins.vision_plugin import VisionPlugin
 from plugins.mcp_loader import MCPPluginLoader
-
+from os import getenv
 log = logging.getLogger(__name__)
 
 
@@ -108,8 +108,8 @@ class PluginManager:
         # Load MCP plugins if configured
         mcpo_servers = [
             {
-                "url": "http://localhost:8000",
-                "api_key": "secret-key",
+                "url": getenv("MCPO_BASE_URL", "http://localhost:8000"),
+                "api_key": getenv('MCPO_API_KEY', "secret-key"),
                 "enabled": True,
                 "name": "Local MCP Server",
                 "description": "Development MCP server",
