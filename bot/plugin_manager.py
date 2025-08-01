@@ -255,8 +255,6 @@ class PluginManager:
                     continue
                 
                 for spec in plugin_specs:
-                    if spec["name"] == exception:
-                        continue
                     log.debug(f"Plugin {plugin} spec missing required fields: {spec}")
                     try:
                         # For MCP plugins, the spec is already in OpenAI format
@@ -267,7 +265,8 @@ class PluginManager:
                             if not all(key in spec for key in ['name', 'description', 'parameters']):
                                 log.warning(f"Plugin {plugin} spec missing required fields: {spec}")
                                 continue
-
+                            if spec["name"] == exception:
+                                continue
                             function = {
                                 "type": "function",
                                 "function": {
