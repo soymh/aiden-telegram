@@ -1379,8 +1379,8 @@ class ChatGPTTelegramBot:
         attachments_info = []
         attachments_info.append(f"UserID (user_id: {update.effective_user.id})")
         if message.photo:
-            image = update.message.effective_attachment[-1]
-            attachments_info.append(f"Photo (file_id: {image.file_id})")
+            photo = message.photo[-1]
+            attachments_info.append(f"Photo (file_id: {photo.file_id})")
         if message.document:
             attachments_info.append(f"Document (filename: {message.document.file_name or 'unknown'}, file_id: {message.document.file_id})")
         if message.audio:

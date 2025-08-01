@@ -19,17 +19,17 @@ class VisionPlugin(Plugin):
     def get_spec(self) -> [Dict]:
         return [{
             "name": "interpret_telegram_image",
-            "description": "Interpret an image from Telegram using the Vision model.",
+            "description": "Interpret an image from user using the Vision model.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "file_id": {
                         "type": "string",
-                        "description": "The Telegram file ID of the image.",
+                        "description": "The user file ID of the image.",
                     },
                     "prompt": {
                         "type": "string",
-                        "description": "A prompt to guide the image interpretation.",
+                        "description": "A prompt to guide the image interpretation. Use the user query as prompt.",
                     },
                     },
                 },

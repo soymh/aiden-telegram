@@ -674,7 +674,7 @@ class OpenAIHelper:
 
         bot_language = self.config['bot_language']
         try:
-            if str(self.chat_id) not in self.conversations or self.__max_age_reached(self.user_id, self.username, self.chat_id):
+            if self.chat_id not in self.conversations or self.__max_age_reached(self.user_id, self.username, self.chat_id):
                 self.reset_chat_history(self.user_id, self.username, self.chat_id)
 
             self.last_updated[self.chat_id] = datetime.datetime.now()
@@ -690,11 +690,11 @@ class OpenAIHelper:
                 self.add_to_history(self.user_id, self.username, self.chat_id, role="user", content=query)
 
             # Summarize the chat history if it's too long to avoid excessive token usage
-            token_count = self.__count_tokens(self.conversations[self.chat_id])
-            exceeded_max_tokens = token_count + self.config['max_tokens'] > self.__max_model_tokens()
+            # token_count = self.__count_tokens(self.conversations[self.chat_id])
+            # exceeded_max_tokens = token_count + self.config['max_tokens'] > self.__max_model_tokens()
             exceeded_max_history_size = len(self.conversations[self.chat_id]) > self.config['max_history_size']
 
-            if exceeded_max_tokens or exceeded_max_history_size:
+            if exceeded_max_history_size:
                 self.logger.info(f'Chat history for chat ID {self.chat_id} is too long. Summarising...')
                 try:
                     
@@ -722,13 +722,14 @@ class OpenAIHelper:
             }
 
 
-            # vision model does support functions
-
-            if self.config['enable_functions']:
-                functions = self.plugin_manager.get_functions_specs()
-                if len(functions) > 0:
-                    common_args['tools'] = self.plugin_manager.get_functions_specs()
-                    common_args['tool_choice'] = 'auto'
+            # vision model does support functions EXCEPT VISION(Preventing Possible Recursive Function Calling)
+            # -----------------NOW COMMENTED FOR MAYBE FUTURE USE-----------------
+            # if self.config['enable_functions']:
+            #     functions = self.plugin_manager.get_functions_specs(exception="interpret_telegram_image")
+            #     if len(functions) > 0:
+            #         common_args['tools'] = self.plugin_manager.get_functions_specs(exception="interpret_telegram_image")
+            #         self.logger.warning(f"Function in terpret_telegram_image:{'interpret_telegram_image' in common_args['tools']}")
+            #         common_args['tool_choice'] = 'auto'
             
             return await self.client.chat.completions.create(**common_args)
 
@@ -777,7 +778,7 @@ class OpenAIHelper:
                 answer += '\n\n'
         else:
             answer = response.choices[0].message.content.strip()
-            self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=answer)
+            # self.add_to_history(self.user_id, self.username, self.chat_id, role="assistant", content=answer)
 
         bot_language = self.config['bot_language']
         # Plugins are not enabled either
@@ -883,6 +884,7 @@ class OpenAIHelper:
         :param content: The message content
         """
         self.user_update(user_id, username, chat_id)
+        # self.logger.warning(f"---------------CHAT HISTORY IS:{self.usage[self.user_id].do_conversations(self.user_id)}-----------------------")
         if function_call:
             self.usage[self.user_id].do_conversations(self.chat_id, {"role": role, "content": content, "function_call": function_call})
         else:

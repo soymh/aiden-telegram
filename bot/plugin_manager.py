@@ -238,7 +238,7 @@ class PluginManager:
 
         return function
 
-    def get_functions_specs(self):
+    def get_functions_specs(self, exception=None):
         """
         Return the list of function specs that can be called by the model.
         Handles both built-in and MCP plugins.
@@ -255,6 +255,8 @@ class PluginManager:
                     continue
                 
                 for spec in plugin_specs:
+                    if spec["name"] == exception:
+                        continue
                     log.debug(f"Plugin {plugin} spec missing required fields: {spec}")
                     try:
                         # For MCP plugins, the spec is already in OpenAI format
