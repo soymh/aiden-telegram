@@ -10,7 +10,7 @@ from telegram import Bot
 from .plugin import Plugin
 
 # Constants for better readability and maintainability
-NOTED_MD_CLI = "bot/src/notedmd-v3.0"
+NOTED_MD_CLI = "./bot/src/notedmd-v3.0"
 TMP_DIR = Path("/tmp")
 
 # Configure logging
