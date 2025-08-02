@@ -1386,7 +1386,7 @@ class ChatGPTTelegramBot:
             await self.vision(update=update, context=context)
             return
         if message.document:
-            if '.jpeg' or '.png' or '.jpg' in (message.document.file_name or "unkown"):
+            if message.document.mime_type and message.document.mime_type.startswith("image/"):
                 await self.vision(update=update, context=context)
                 return
             attachments_info.append(f"Document (filename: {message.document.file_name or 'unknown'}, file_id: {message.document.file_id})")
