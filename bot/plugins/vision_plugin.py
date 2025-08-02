@@ -3,7 +3,7 @@ import logging
 from typing import Dict
 
 from PIL import Image
-from telegram import constants, Bot
+from telegram import Bot
 
 from .plugin import Plugin
 from os import getenv

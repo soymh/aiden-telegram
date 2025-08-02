@@ -2562,7 +2562,7 @@ class ChatGPTTelegramBot:
             filters.VIDEO | filters.VIDEO_NOTE | filters.Document.VIDEO,
             self.transcribe))
         
-        application.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.TEXT & (~filters.COMMAND), self.prompt))
+        application.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.TEXT & (~filters.COMMAND), self.prompt))
         application.add_handler(InlineQueryHandler(self.inline_query, chat_types=[
             constants.ChatType.GROUP, constants.ChatType.SUPERGROUP, constants.ChatType.PRIVATE
         ]))

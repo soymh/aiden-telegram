@@ -28,6 +28,8 @@ from plugins.media_relay import MediaRelayPlugin
 from plugins.message_plugin import MessagePlugin
 from plugins.vision_plugin import VisionPlugin
 from plugins.mcp_loader import MCPPluginLoader
+from plugins.pdf_processor import NotedMDPlugin
+
 from os import getenv
 log = logging.getLogger(__name__)
 
@@ -86,7 +88,8 @@ class PluginManager:
             'reddit_helper': RedditHelper,
             'media_relay': MediaRelayPlugin,
             'message_sender': MessagePlugin,
-            'vision': VisionPlugin
+            'vision': VisionPlugin,
+            'pdf_extract': NotedMDPlugin,
         }
 
         # Initialize built-in plugins
