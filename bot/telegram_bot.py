@@ -851,14 +851,16 @@ class ChatGPTTelegramBot:
                    (prompt is not None and not prompt.lower().startswith(gp_trigger_keyword.lower())):
                     self.logger.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
-        
-        image = update.message.effective_attachment[-1]
-        
+                
+        if update.message.photo:
+            file_id = update.message.photo[-1].file_id
+        if update.message.document:
+            file_id = update.message.document.file_id
 
         async def _execute():
             bot_language = self.config['bot_language']
             try:
-                media_file = await context.bot.get_file(image.file_id)
+                media_file = await context.bot.get_file(file_id)
                 temp_file = io.BytesIO(await media_file.download_as_bytearray())
             except Exception as e:
                 self.logger.exception(e)
@@ -1381,7 +1383,12 @@ class ChatGPTTelegramBot:
         if message.photo:
             photo = message.photo[-1]
             attachments_info.append(f"Photo (file_id: {photo.file_id})")
+            await self.vision(update=update, context=context)
+            return
         if message.document:
+            if '.jpeg' or '.png' or '.jpg' in (message.document.file_name or "unkown"):
+                await self.vision(update=update, context=context)
+                return
             attachments_info.append(f"Document (filename: {message.document.file_name or 'unknown'}, file_id: {message.document.file_id})")
         if message.audio:
             attachments_info.append(f"Audio (title: {message.audio.title or 'unknown'}, file_id: {message.audio.file_id})")
