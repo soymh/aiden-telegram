@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
 from uuid import uuid4
-from telegram import BotCommandScopeAllGroupChats, Update, constants , InputMediaPhoto
+from telegram import BotCommandScopeAllGroupChats, Update, constants , Bot
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultArticle
 from telegram import InputTextMessageContent, BotCommand
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
@@ -1417,11 +1417,11 @@ class ChatGPTTelegramBot:
             photo = message.photo[-1]
             attachments_info.append(f"Photo (file_id: {photo.file_id})")
             await self.vision(update=update, context=context)
-            return
+            return None, True 
         if message.document:
             if message.document.mime_type and message.document.mime_type.startswith("image/"):
                 await self.vision(update=update, context=context)
-                return
+                return None, True 
             attachments_info.append(f"Document (filename: {message.document.file_name or 'unknown'}, file_id: {message.document.file_id})")
         if message.audio:
             attachments_info.append(f"Audio (title: {message.audio.title or 'unknown'}, file_id: {message.audio.file_id})")
@@ -1599,7 +1599,7 @@ class ChatGPTTelegramBot:
             return text
         text = extract_text(update, context)
         parts = text.split()
-        command = parts[0].lstrip('/')
+        command = parts[0].lstrip('/') if parts else ""
         args = parts[1:]
         if command in self.usage[user_id].get_prompts():
             prompt_name = command
@@ -2101,7 +2101,7 @@ class ChatGPTTelegramBot:
 
         if admin_user_id != 0: # Ensure admin_user_id is set
             telegram_logging_handler = TelegramLoggingHandler(
-                bot=application.bot,
+                bot=Bot(self.config.get('logger_bot_token')),
                 admin_user_id=admin_user_id,
                 loop=self.telegram_loop,
                 bot_language=bot_language,

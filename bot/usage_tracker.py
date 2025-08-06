@@ -106,6 +106,7 @@ class UsageTracker:
         self.telegram_config = {
             # Telegram Bot Configuration
             'token': os.environ['TELEGRAM_BOT_TOKEN'],
+            'logger_bot_token': os.environ.get('LOGGER_BOT_TOKEN', ""),
             'mod_bot_token': os.environ.get("MODERATOR_TOKEN", ""),
             'channel_id': os.environ.get('CHANNEL_ID', ""),
             'group_id': os.environ.get('GROUP_ID', ""),
