@@ -148,37 +148,6 @@ class ChatGPTTelegramBot:
         self.telegram_application = None # To store the Application instance
         self.telegram_loop = None
         self.setup_api_routes() # Call method to set up API routes
-        
-    async def post_init(self, application: Application) -> None:
-        """
-        Post initialization hook for the bot.
-        """
-        self.telegram_application = application
-        # Capture the running event loop using asyncio.get_running_loop()
-        self.telegram_loop = asyncio.get_running_loop()
-        self.logger.info(f"Main Telegram bot event loop captured in post_init: {self.telegram_loop}")
-
-        await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
-        await application.bot.set_my_commands(self.commands)
-
-        # Add Telegram logging handler to send warnings to admin
-        admin_user_id = int(self.config.get('admin_user_id', 0)) # Get admin_user_id from config
-        bot_language = self.config['bot_language']
-
-        if admin_user_id != 0: # Ensure admin_user_id is set
-            telegram_logging_handler = TelegramLoggingHandler(
-                bot=application.bot,
-                admin_user_id=admin_user_id,
-                loop=self.telegram_loop,
-                bot_language=bot_language,
-                localized_text_func=self.localized_text
-            )
-            telegram_logging_handler.setLevel(logging.WARNING) # Set this handler to only process WARNING and higher
-            logging.getLogger().addHandler(telegram_logging_handler) # Add to the root logger
-            self.logger.info("TelegramLoggingHandler added for WARNING messages to admin.")
-        else:
-            self.logger.warning("Admin user ID is not configured. Telegram logging to admin is disabled.")
-
             
     def setup_api_routes(self):
         @self.api_app.route('/api/send_message', methods=['POST'])
@@ -2125,6 +2094,24 @@ class ChatGPTTelegramBot:
 
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
+
+        # Add Telegram logging handler to send warnings to admin
+        admin_user_id = int(self.config.get('admin_user_id', 0)) # Get admin_user_id from config
+        bot_language = self.config['bot_language']
+
+        if admin_user_id != 0: # Ensure admin_user_id is set
+            telegram_logging_handler = TelegramLoggingHandler(
+                bot=application.bot,
+                admin_user_id=admin_user_id,
+                loop=self.telegram_loop,
+                bot_language=bot_language,
+                localized_text_func=self.localized_text
+            )
+            telegram_logging_handler.setLevel(logging.WARNING) # Set this handler to only process WARNING and higher
+            logging.getLogger().addHandler(telegram_logging_handler) # Add to the root logger
+            self.logger.info("TelegramLoggingHandler added for WARNING messages to admin.")
+        else:
+            self.logger.warning("Admin user ID is not configured. Telegram logging to admin is disabled.")
     # Helper: generate a formatted table of all users.
     def get_all_users_table(self) -> str:
         header = f"{'User ID':<12} | {'Username':<20} | {'Allowed':<7}\n" + "-" * 50 + "\n"
