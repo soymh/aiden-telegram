@@ -102,6 +102,7 @@ class ChatGPTTelegramBot:
             command='moderate', description=self.localized_text('moderate_description', bot_language)
         )] + self.commands
         self.disallowed_message = "Sorry...\n You are not allowed to perform this action."
+        self.missing_info_message = "Please ensure you have set your fullname/username/user_id in your telegram account settings"
         self.budget_limit_message = self.localized_text('budget_limit', bot_language)
         self.last_message = {}
         self.inline_queries_cache = {}
@@ -1885,6 +1886,23 @@ class ChatGPTTelegramBot:
             return False
 
         return True
+    async def send_missing_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline=False):
+        user = update.effective_user
+        fullname = str(user.full_name if user.full_name else None)
+        username = str(user.username if user.username else None)
+        user_id = str(user.id)
+        chat_id = self.extract_chat_id(update)
+        self.logger.info(f"User:{fullname or username or user_id} with id:{user_id} has some missing information in their (fullname/username/user_id)\n")
+        if not is_inline:
+            await update.effective_message.reply_text(
+                message_thread_id=get_thread_id(update),
+                text=self.missing_info_message,
+            )
+        else:
+            result_id = str(uuid.uuid4())
+            inline_message = f"{self.missing_info_message}"
+            await self.send_inline_query_result(update, result_id, message_content=inline_message)
+
 
     async def send_disallowed_markup(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_inline=False):
         """
@@ -1893,9 +1911,11 @@ class ChatGPTTelegramBot:
         if await is_forbidden(self.config,update,context) or await is_allowed(self.config,update,context):
             return
         user = update.effective_user
-        fullname = str(user.full_name if user.full_name else 'N/A')
-        username = str(user.username if user.username else 'N/A')
+        fullname = str(user.full_name if user.full_name else None)
+        username = str(user.username if user.username else None)
         user_id = str(user.id)
+        if not (username or fullname or user_id):
+            await self.send_missing_info(update, context, is_inline=is_inline)
         chat_id = self.extract_chat_id(update)
         join_button = InlineKeyboardButton(
             "I wanna join the Bot users!",
