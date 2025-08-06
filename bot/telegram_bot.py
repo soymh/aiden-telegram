@@ -45,6 +45,38 @@ translations_file_path = os.path.join(parent_dir_path, 'translations.json')
 with open(translations_file_path, 'r', encoding='utf-8') as f:
     translations = json.load(f)
 
+class TelegramLoggingHandler(logging.Handler):
+    def __init__(self, bot: Bot, admin_user_id: int, loop: asyncio.AbstractEventLoop, bot_language: str, localized_text_func):
+        super().__init__()
+        self.bot = bot
+        self.admin_user_id = admin_user_id
+        self.loop = loop
+        self.bot_language = bot_language
+        self.localized_text = localized_text_func
+        self.formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+
+    def emit(self, record):
+        # Only send WARNING level messages and higher
+        if record.levelno >= logging.WARNING:
+            log_entry = self.format(record)
+            # Schedule the coroutine on the bot's event loop
+            asyncio.run_coroutine_threadsafe(self.send_telegram_message(log_entry), self.loop)
+
+    async def send_telegram_message(self, message):
+        try:
+            admin_log_prefix = self.localized_text('admin_log_prefix', self.bot_language)
+            full_message = f"🚨 {admin_log_prefix}\n\n`{message}`"
+            
+            # Truncate if message exceeds Telegram's limit (4096 characters for text)
+            if len(full_message) > 4096:
+                full_message = full_message[:4090] + "..." 
+            
+            await self.bot.send_message(chat_id=self.admin_user_id, text=full_message, parse_mode='Markdown')
+        except Exception as e:
+            # Print to stderr or use another handler to avoid infinite loops
+            print(f"ERROR: Failed to send log message to admin via Telegram: {e}", file=sys.stderr)
+
+
 
 class ChatGPTTelegramBot:
     """
@@ -116,6 +148,37 @@ class ChatGPTTelegramBot:
         self.telegram_application = None # To store the Application instance
         self.telegram_loop = None
         self.setup_api_routes() # Call method to set up API routes
+        
+    async def post_init(self, application: Application) -> None:
+        """
+        Post initialization hook for the bot.
+        """
+        self.telegram_application = application
+        # Capture the running event loop using asyncio.get_running_loop()
+        self.telegram_loop = asyncio.get_running_loop()
+        self.logger.info(f"Main Telegram bot event loop captured in post_init: {self.telegram_loop}")
+
+        await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
+        await application.bot.set_my_commands(self.commands)
+
+        # Add Telegram logging handler to send warnings to admin
+        admin_user_id = int(self.config.get('admin_user_id', 0)) # Get admin_user_id from config
+        bot_language = self.config['bot_language']
+
+        if admin_user_id != 0: # Ensure admin_user_id is set
+            telegram_logging_handler = TelegramLoggingHandler(
+                bot=application.bot,
+                admin_user_id=admin_user_id,
+                loop=self.telegram_loop,
+                bot_language=bot_language,
+                localized_text_func=self.localized_text
+            )
+            telegram_logging_handler.setLevel(logging.WARNING) # Set this handler to only process WARNING and higher
+            logging.getLogger().addHandler(telegram_logging_handler) # Add to the root logger
+            self.logger.info("TelegramLoggingHandler added for WARNING messages to admin.")
+        else:
+            self.logger.warning("Admin user ID is not configured. Telegram logging to admin is disabled.")
+
             
     def setup_api_routes(self):
         @self.api_app.route('/api/send_message', methods=['POST'])
