@@ -1,7 +1,7 @@
 FROM archlinux:latest
 
 RUN pacman -Syu --noconfirm \
-    && pacman -S --noconfirm curl rust ffmpeg python-pip python-virtualenv ca-certificates poppler \
+    && pacman -S --noconfirm curl rust ffmpeg python-pip python-virtualenv ca-certificates poppler pandoc \
     && pacman -Scc --noconfirm
 
 # Create config directory and files for noted.md
