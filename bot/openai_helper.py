@@ -744,28 +744,31 @@ class OpenAIHelper:
             raise Exception(f"⚠️ _{self.localized_text('error', bot_language)}._ ⚠️\n{str(e)}") from e
 
 
-    async def interpret_image(self, user_id: int, username: str, chat_id, fileobj, prompt=None):
+    async def interpret_image(self, user_id: int, username: str, chat_id, fileobjs, prompt=None):
         """
         Interprets a given PNG image file using the Vision model.
         """
         self.user_update(user_id, username, chat_id)
 
-        image = encode_image(fileobj)
+        # image = encode_image(fileobj)
         prompt = self.config['vision_prompt'] if prompt is None else prompt
+        content = [{'type':'text', 'text':prompt}]
 
-        content = [{'type':'text', 'text':prompt}, {'type':'image_url', \
-                    'image_url': {'url':image, 'detail':self.config['vision_detail'] } }]
+        # content = [{'type':'text', 'text':prompt}, {'type':'image_url', \
+        #             'image_url': {'url':image, 'detail':self.config['vision_detail'] } }]
+        for fileobj in fileobjs:
+            image = encode_image(fileobj) # encode each image as it is being processed
+            content.append({'type':'image_url', \
+                            'image_url': {'url':image, 'detail':self.config['vision_detail'] } })
 
-        response = await self.__common_get_chat_response_vision(self.user_id, self.username, self.chat_id, content)
-
-        
+        response = await self.__common_get_chat_response_vision(self.user_id, self.username, self.chat_id, content)        
 
         # functions are not available for this model
         
-        # if self.config['enable_functions']:
-        #     response, plugins_used = await self.__handle_function_call(self.chat_id, response)
-        #     if is_direct_result(response):
-        #         return response, '0'
+        if self.config['enable_functions']:
+            response, plugins_used = await self.__handle_function_call(self.chat_id, response)
+            if is_direct_result(response):
+                return response, '0'
 
         answer = ''
 
