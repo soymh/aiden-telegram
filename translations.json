@@ -8,12 +8,12 @@
         "resend_description": "Resend the latest message",
         "chat_description": "Chat with the bot!",
         "moderate_description": "Moderates Telegram messages by sending, forwarding, or managing forum topics.",
-        "disallowed": "Sorry, you are not allowed to use this bot. You can check out the source code at https://github.com/n3d1117/chatgpt-telegram-bot",
+        "disallowed": "Sorry, you are not allowed to use this bot. You can check out the source code at https://github.com/soymh/aiden-telegram",
         "budget_limit": "Sorry, you have reached your usage limit.",
         "help_text": [
             "I'm a ChatGPT bot, talk to me!",
             "Send me a voice message or file and I'll transcribe it for you",
-            "Open source at https://github.com/n3d1117/chatgpt-telegram-bot"
+            "Open source at https://github.com/soymh/aiden-telegram"
         ],
         "stats_conversation": [
             "Current conversation",
@@ -78,12 +78,12 @@
         "resend_description": "آخرین پیام را دوباره ارسال کنید.",
         "chat_description": "با ربات چت کنید!",
         "moderate_description": "پیام‌های تلگرام را با ارسال، فروارد کردن یا مدیریت موضوعات انجمن، مدیریت می‌کند.",
-        "disallowed": "متاسفم، شما مجاز به استفاده از این ربات نیستید. می‌توانید کد منبع را در https://github.com/n3d1117/chatgpt-telegram-bot بررسی کنید.",
+        "disallowed": "متاسفم، شما مجاز به استفاده از این ربات نیستید. می‌توانید کد منبع را در https://github.com/soymh/aiden-telegram بررسی کنید.",
         "budget_limit": "متاسفم، شما به محدودیت استفاده خود رسیده‌اید.",
         "help_text": [
             "من یک ربات ChatGPT هستم، با من صحبت کن!",
             "یک پیام صوتی یا فایل برایم بفرستید تا من آن را برای شما رونویسی کنم.",
-            "متن‌باز در https://github.com/n3d1117/chatgpt-telegram-bot"
+            "متن‌باز در https://github.com/soymh/aiden-telegram"
         ],
         "stats_conversation": [
             "متن فعلی",

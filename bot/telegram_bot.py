@@ -1474,7 +1474,6 @@ class ChatGPTTelegramBot:
         #     fchat = message.forward_from_chat
         #     fwd_chat_str = f"Forwarded from chat: {fchat.title or ''} ({fchat.username or ''})".strip()
         #     new_prompt_parts.append(fwd_chat_str)
-        input(f"commadn in process is:{command}")
         if command:
             new_prompt_parts.append(f"User's explicit command: '{command}'")
         if message.caption:
